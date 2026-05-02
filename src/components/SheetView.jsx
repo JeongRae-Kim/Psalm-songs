@@ -4,39 +4,44 @@ import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
 export default function SheetView({ sheetImage, sheetPdf, title }) {
   return (
     <div className="flex flex-col">
-      {/* 악보 이미지 + 핀치 줌 — 최상단 밀착, 화면 너비 맞춤 */}
-      <TransformWrapper
-        initialScale={1}
-        minScale={0.5}
-        maxScale={3}
-        doubleClick={{ mode: "toggle", step: 0.7 }}
-        centerOnInit={false}
-        limitToBounds={true}
-      >
-        <TransformComponent
-          wrapperStyle={{
-            width: "100%",
-            maxHeight: "75vh",
-            overflow: "hidden",
-          }}
-          contentStyle={{
-            width: "100%",
-            display: "flex",
-            justifyContent: "center",
-          }}
+      {/* 악보 영역 — overflow-hidden으로 탭 바 위로 넘침 방지 */}
+      <div className="overflow-hidden relative" style={{ maxHeight: "75vh" }}>
+        <TransformWrapper
+          initialScale={1}
+          minScale={0.5}
+          maxScale={3}
+          doubleClick={{ mode: "toggle", step: 0.7 }}
+          centerOnInit={false}
+          limitToBounds={true}
+          panning={{ velocityDisabled: true }}
+          alignmentAnimation={{ sizeX: 0, sizeY: 0 }}
         >
-          <img
-            src={sheetImage}
-            alt={`${title} 악보`}
-            style={{
+          <TransformComponent
+            wrapperStyle={{
               width: "100%",
-              height: "auto",
-              display: "block",
-              backgroundColor: "#faf8f4",
+              maxHeight: "75vh",
+              overflow: "hidden",
             }}
-          />
-        </TransformComponent>
-      </TransformWrapper>
+            contentStyle={{
+              width: "100%",
+              display: "flex",
+              justifyContent: "center",
+              transformOrigin: "top left",
+            }}
+          >
+            <img
+              src={sheetImage}
+              alt={`${title} 악보`}
+              style={{
+                width: "100%",
+                height: "auto",
+                display: "block",
+                backgroundColor: "#faf8f4",
+              }}
+            />
+          </TransformComponent>
+        </TransformWrapper>
+      </div>
 
       {/* 줌 안내 */}
       <p className="text-center text-t-hint py-1.5"
