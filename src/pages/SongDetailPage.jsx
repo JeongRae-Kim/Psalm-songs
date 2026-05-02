@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import useSongs from "../hooks/useSongs";
 import useFavorites from "../hooks/useFavorites";
@@ -68,9 +68,15 @@ export default function SongDetailPage() {
   const [activeTab, setActiveTab] = useState("sheet");
   const [immersive, setImmersive] = useState(false);
 
+  // 상단·하단 높이 측정용 ref
+  const headerRef = useRef(null);
+  const footerRef = useRef(null);
+  const [headerH, setHeaderH] = useState(88);
+  const [footerH, setFooterH] = useState(96);
+
   const song = songs.find((s) => s.id === id);
 
-  // 이전/다음 곡 계산
+  // 이전/다음 곡
   const currentIndex = useMemo(
     () => songs.findIndex((s) => s.id === id),
     [songs, id]
@@ -89,6 +95,17 @@ export default function SongDetailPage() {
   useEffect(() => {
     if (id) addRecent(id);
   }, [id, addRecent]);
+
+  // 상단·하단 높이 측정
+  useEffect(() => {
+    const measure = () => {
+      if (headerRef.current) setHeaderH(headerRef.current.offsetHeight);
+      if (footerRef.current) setFooterH(footerRef.current.offsetHeight);
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [immersive]);
 
   if (loading) {
     return (
@@ -112,88 +129,113 @@ export default function SongDetailPage() {
     );
   }
 
+  // 몰입 모드일 때 하단 높이는 0
+  const effectiveFooterH = immersive ? 0 : footerH;
+  // 몰입 모드일 때 상단은 1행만 (탭바 숨김)
+  const effectiveHeaderH = headerH;
+
   return (
-    <div className="h-screen flex flex-col bg-page overflow-hidden">
+    <div className="bg-page" style={{ overscrollBehavior: "none" }}>
 
-      {/* ━━ 상단 1행: 홈 + 제목 + 즐겨찾기 + 몰입 토글 (항상 고정) ━━ */}
-      <header className="shrink-0 bg-card border-b border-b-light px-3 py-2.5">
-        <div className="max-w-3xl mx-auto flex items-center gap-2">
-          {/* 홈 */}
-          <button
-            onClick={() => navigate("/")}
-            className="shrink-0 text-t-hint hover:text-t-primary transition-colors"
-            title="홈으로"
-          >
-            <HomeIcon />
-          </button>
-
-          {/* 제목 */}
-          <h1 className="text-base font-bold text-t-primary truncate flex-1 min-w-0">
-            {song.title}
-          </h1>
-
-          {/* 즐겨찾기 */}
-          <button
-            onClick={() => toggleFavorite(song.id)}
-            className="shrink-0 text-lg hover:scale-110 transition-transform"
-          >
-            {isFavorite(song.id) ? (
-              <span className="text-yellow-400">★</span>
-            ) : (
-              <span className="text-t-muted">☆</span>
-            )}
-          </button>
-
-          {/* 몰입 모드 토글 */}
-          <button
-            onClick={() => setImmersive(!immersive)}
-            className="shrink-0 text-t-hint hover:text-t-primary transition-colors"
-            title={immersive ? "일반 모드" : "전체 화면"}
-          >
-            {immersive ? <ShrinkIcon /> : <ExpandIcon />}
-          </button>
-        </div>
-      </header>
-
-      {/* ━━ 상단 2행: 악보 탭 + 성경 본문 + 가사 탭 (몰입 시 숨김) ━━ */}
-      {!immersive && (
-        <div
-          className="shrink-0 border-b border-b-light transition-all duration-300"
-          style={{ backgroundColor: "var(--c-accent, #1e293b)" }}
-        >
-          <div className="max-w-3xl mx-auto flex items-center">
+      {/* ━━ 상단 고정 ━━ */}
+      <div
+        ref={headerRef}
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          zIndex: 50,
+        }}
+      >
+        {/* 1행: 홈 + 제목 + 즐겨찾기 + 몰입 토글 */}
+        <div className="bg-card border-b border-b-light px-3 py-2.5">
+          <div className="max-w-3xl mx-auto flex items-center gap-2">
             <button
-              onClick={() => setActiveTab("sheet")}
-              className={`flex-1 text-center py-2.5 text-sm font-medium transition-colors
-                ${activeTab === "sheet"
-                  ? "text-white border-b-2 border-white"
-                  : "text-white/60 hover:text-white/80"
-                }`}
+              onClick={() => navigate("/")}
+              className="shrink-0 text-t-hint hover:text-t-primary transition-colors"
+              title="홈으로"
             >
-              악보
+              <HomeIcon />
             </button>
 
-            <span className="text-white/90 text-xs font-medium px-2 whitespace-nowrap">
-              {scriptureLabel}
-            </span>
+            <h1 className="text-base font-bold text-t-primary truncate flex-1 min-w-0">
+              {song.title}
+            </h1>
 
             <button
-              onClick={() => setActiveTab("lyrics")}
-              className={`flex-1 text-center py-2.5 text-sm font-medium transition-colors
-                ${activeTab === "lyrics"
-                  ? "text-white border-b-2 border-white"
-                  : "text-white/60 hover:text-white/80"
-                }`}
+              onClick={() => toggleFavorite(song.id)}
+              className="shrink-0 text-lg hover:scale-110 transition-transform"
             >
-              가사
+              {isFavorite(song.id) ? (
+                <span className="text-yellow-400">★</span>
+              ) : (
+                <span className="text-t-muted">☆</span>
+              )}
+            </button>
+
+            <button
+              onClick={() => setImmersive(!immersive)}
+              className="shrink-0 text-t-hint hover:text-t-primary transition-colors"
+              title={immersive ? "일반 모드" : "전체 화면"}
+            >
+              {immersive ? <ShrinkIcon /> : <ExpandIcon />}
             </button>
           </div>
         </div>
-      )}
+
+        {/* 2행: 악보 탭 + 성경 본문 + 가사 탭 (몰입 시 숨김) */}
+        {!immersive && (
+          <div
+            className="border-b border-b-light"
+            style={{ backgroundColor: "var(--c-accent, #1e293b)" }}
+          >
+            <div className="max-w-3xl mx-auto flex items-center">
+              <button
+                onClick={() => setActiveTab("sheet")}
+                className={`flex-1 text-center py-2.5 text-sm font-medium transition-colors
+                  ${activeTab === "sheet"
+                    ? "text-white border-b-2 border-white"
+                    : "text-white/60 hover:text-white/80"
+                  }`}
+              >
+                악보
+              </button>
+
+              <span className="text-white/90 text-xs font-medium px-2 whitespace-nowrap">
+                {scriptureLabel}
+              </span>
+
+              <button
+                onClick={() => setActiveTab("lyrics")}
+                className={`flex-1 text-center py-2.5 text-sm font-medium transition-colors
+                  ${activeTab === "lyrics"
+                    ? "text-white border-b-2 border-white"
+                    : "text-white/60 hover:text-white/80"
+                  }`}
+              >
+                가사
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* ━━ 중간: 악보 또는 가사 (스크롤 영역) ━━ */}
-      <main className="flex-1 overflow-auto min-h-0">
-        <div className="max-w-3xl mx-auto h-full">
+      <main
+        style={{
+          position: "fixed",
+          top: effectiveHeaderH,
+          bottom: effectiveFooterH,
+          left: 0,
+          right: 0,
+          overflowY: "auto",
+          overflowX: "hidden",
+          WebkitOverflowScrolling: "touch",
+          overscrollBehavior: "contain",
+        }}
+      >
+        <div className="max-w-3xl mx-auto">
           {activeTab === "sheet" && (
             <SheetView
               sheetImage={song.sheetImage}
@@ -206,69 +248,76 @@ export default function SongDetailPage() {
         </div>
       </main>
 
-      {/* ━━ 하단 (몰입 시 숨김) ━━ */}
+      {/* ━━ 하단 고정 (몰입 시 숨김) ━━ */}
       {!immersive && (
-        <footer className="shrink-0 bg-card border-t border-b-light transition-all duration-300">
-          <div className="max-w-3xl mx-auto">
+        <div
+          ref={footerRef}
+          style={{
+            position: "fixed",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            zIndex: 50,
+          }}
+        >
+          <div className="bg-card border-t border-b-light">
+            <div className="max-w-3xl mx-auto">
 
-            {/* 하단 1줄: ◀ 목차 ▶ + 다운로드 */}
-            <div className="flex items-center px-3 py-2">
-              {/* 이전 */}
-              <button
-                onClick={() => prevSong && navigate(`/song/${prevSong.id}`)}
-                disabled={!prevSong}
-                className={`shrink-0 p-1.5 rounded-full transition-colors
-                  ${prevSong
-                    ? "text-t-secondary hover:text-t-primary hover:bg-gray-100 active:bg-gray-200"
-                    : "text-t-muted/30 cursor-not-allowed"
-                  }`}
-                title="이전 곡"
-              >
-                <PrevIcon />
-              </button>
+              {/* 하단 1줄: ◀ 목차 ▶ + 다운로드 */}
+              <div className="flex items-center px-3 py-2">
+                <button
+                  onClick={() => prevSong && navigate(`/song/${prevSong.id}`)}
+                  disabled={!prevSong}
+                  className={`shrink-0 p-1.5 rounded-full transition-colors
+                    ${prevSong
+                      ? "text-t-secondary hover:text-t-primary hover:bg-gray-100 active:bg-gray-200"
+                      : "text-t-muted/30 cursor-not-allowed"
+                    }`}
+                  title="이전 곡"
+                >
+                  <PrevIcon />
+                </button>
 
-              {/* 현재 목차 */}
-              <span className="flex-1 text-center text-xs font-medium text-t-secondary">
-                {scriptureLabel}
-              </span>
+                <span className="flex-1 text-center text-xs font-medium text-t-secondary">
+                  {scriptureLabel}
+                </span>
 
-              {/* 다음 */}
-              <button
-                onClick={() => nextSong && navigate(`/song/${nextSong.id}`)}
-                disabled={!nextSong}
-                className={`shrink-0 p-1.5 rounded-full transition-colors
-                  ${nextSong
-                    ? "text-t-secondary hover:text-t-primary hover:bg-gray-100 active:bg-gray-200"
-                    : "text-t-muted/30 cursor-not-allowed"
-                  }`}
-                title="다음 곡"
-              >
-                <NextIcon />
-              </button>
+                <button
+                  onClick={() => nextSong && navigate(`/song/${nextSong.id}`)}
+                  disabled={!nextSong}
+                  className={`shrink-0 p-1.5 rounded-full transition-colors
+                    ${nextSong
+                      ? "text-t-secondary hover:text-t-primary hover:bg-gray-100 active:bg-gray-200"
+                      : "text-t-muted/30 cursor-not-allowed"
+                    }`}
+                  title="다음 곡"
+                >
+                  <NextIcon />
+                </button>
 
-              {/* PDF 다운로드 */}
-              <a
-                href={song.sheetPdf}
-                download
-                className="shrink-0 ml-2 p-1.5 rounded-full text-t-hint
-                  hover:text-t-primary hover:bg-gray-100 active:bg-gray-200
-                  transition-colors"
-                title="PDF 다운로드"
-              >
-                <DownloadIcon />
-              </a>
+                <a
+                  href={song.sheetPdf}
+                  download
+                  className="shrink-0 ml-2 p-1.5 rounded-full text-t-hint
+                    hover:text-t-primary hover:bg-gray-100 active:bg-gray-200
+                    transition-colors"
+                  title="PDF 다운로드"
+                >
+                  <DownloadIcon />
+                </a>
+              </div>
+
+              {/* 하단 2줄: 메모 */}
+              <div className="px-3 pb-2">
+                <MemoEditor
+                  value={getMemo(song.id)}
+                  onSave={(text) => saveMemo(song.id, text)}
+                />
+              </div>
+
             </div>
-
-            {/* 하단 2줄: 메모 */}
-            <div className="px-3 pb-2">
-              <MemoEditor
-                value={getMemo(song.id)}
-                onSave={(text) => saveMemo(song.id, text)}
-              />
-            </div>
-
           </div>
-        </footer>
+        </div>
       )}
     </div>
   );
