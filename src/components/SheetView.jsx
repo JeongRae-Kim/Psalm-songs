@@ -3,60 +3,131 @@ import { useState, useRef, useCallback, useEffect } from "react";
 export default function SheetView({ sheetImage, title }) {
   const [loaded, setLoaded] = useState(false);
   const [scale, setScale] = useState(1);
+  const [translate, setTranslate] = useState({ x: 0, y: 0 });
   const containerRef = useRef(null);
   const imgRef = useRef(null);
 
-  // 핀치 줌 상태 추적
+  // 핀치 줌 상태
   const pinchRef = useRef({
     active: false,
     initialDistance: 0,
     initialScale: 1,
   });
 
-  // 두 손가락 사이 거리 계산
+  // 패닝 상태
+  const panRef = useRef({
+    active: false,
+    startX: 0,
+    startY: 0,
+    startTranslateX: 0,
+    startTranslateY: 0,
+  });
+
   const getDistance = (touches) => {
     const dx = touches[0].clientX - touches[1].clientX;
     const dy = touches[0].clientY - touches[1].clientY;
     return Math.sqrt(dx * dx + dy * dy);
   };
 
+  // 패닝 범위 제한
+  const clampTranslate = useCallback((tx, ty, s) => {
+    if (s <= 1) return { x: 0, y: 0 };
+    const img = imgRef.current;
+    const container = containerRef.current;
+    if (!img || !container) return { x: tx, y: ty };
+
+    const imgW = img.offsetWidth;
+    const imgH = img.offsetHeight;
+    const containerW = container.offsetWidth - 24; // padding 12px * 2
+    const containerH = container.offsetHeight;
+
+    // 확대된 이미지 크기
+    const scaledW = imgW * s;
+    const scaledH = imgH * s;
+
+    // 이동 가능 범위 (확대로 넘치는 부분만큼)
+    const maxX = Math.max(0, (scaledW - containerW) / 2 / s);
+    const maxY = Math.max(0, (scaledH - containerH) / 2 / s);
+
+    return {
+      x: Math.min(maxX, Math.max(-maxX, tx)),
+      y: Math.min(0, Math.max(-maxY * 2, ty)), // 위로는 이동 제한, 아래로만
+    };
+  }, []);
+
   const handleTouchStart = useCallback((e) => {
     if (e.touches.length === 2) {
+      // 핀치 줌 시작
       e.preventDefault();
       pinchRef.current = {
         active: true,
         initialDistance: getDistance(e.touches),
         initialScale: scale,
       };
+      panRef.current.active = false;
+    } else if (e.touches.length === 1 && scale > 1) {
+      // 확대 상태에서 한 손 패닝 시작
+      e.preventDefault();
+      panRef.current = {
+        active: true,
+        startX: e.touches[0].clientX,
+        startY: e.touches[0].clientY,
+        startTranslateX: translate.x,
+        startTranslateY: translate.y,
+      };
     }
-  }, [scale]);
+  }, [scale, translate]);
 
   const handleTouchMove = useCallback((e) => {
     if (e.touches.length === 2 && pinchRef.current.active) {
+      // 핀치 줌 중
       e.preventDefault();
       const currentDistance = getDistance(e.touches);
       const ratio = currentDistance / pinchRef.current.initialDistance;
       const newScale = Math.min(Math.max(pinchRef.current.initialScale * ratio, 1), 3);
       setScale(newScale);
+
+      // 축소 시 translate도 보정
+      if (newScale <= 1) {
+        setTranslate({ x: 0, y: 0 });
+      }
+    } else if (e.touches.length === 1 && panRef.current.active && scale > 1) {
+      // 확대 상태에서 한 손 패닝 중
+      e.preventDefault();
+      const dx = (e.touches[0].clientX - panRef.current.startX) / scale;
+      const dy = (e.touches[0].clientY - panRef.current.startY) / scale;
+      const newTx = panRef.current.startTranslateX + dx;
+      const newTy = panRef.current.startTranslateY + dy;
+      const clamped = clampTranslate(newTx, newTy, scale);
+      setTranslate(clamped);
     }
-  }, []);
+  }, [scale, clampTranslate]);
 
   const handleTouchEnd = useCallback(() => {
     pinchRef.current.active = false;
+    panRef.current.active = false;
   }, []);
 
   // 더블탭 줌 토글
   const lastTapRef = useRef(0);
   const handleTap = useCallback((e) => {
+    // 핀치나 패닝 직후에는 무시
+    if (e.touches && e.touches.length > 0) return;
     const now = Date.now();
     if (now - lastTapRef.current < 300) {
       e.preventDefault();
-      setScale((prev) => (prev > 1 ? 1 : 2));
+      if (scale > 1) {
+        setScale(1);
+        setTranslate({ x: 0, y: 0 });
+      } else {
+        setScale(2);
+        setTranslate({ x: 0, y: 0 });
+      }
     }
     lastTapRef.current = now;
-  }, []);
+  }, [scale]);
 
-  // 터치 이벤트 등록 (passive: false 필요)
+  // 터치 이벤트 등록
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -66,14 +137,18 @@ export default function SheetView({ sheetImage, title }) {
     el.addEventListener("touchmove", handleTouchMove, opts);
     el.addEventListener("touchend", handleTouchEnd);
     el.addEventListener("touchcancel", handleTouchEnd);
+    el.addEventListener("click", handleTap);
 
     return () => {
       el.removeEventListener("touchstart", handleTouchStart);
       el.removeEventListener("touchmove", handleTouchMove);
       el.removeEventListener("touchend", handleTouchEnd);
       el.removeEventListener("touchcancel", handleTouchEnd);
+      el.removeEventListener("click", handleTap);
     };
-  }, [handleTouchStart, handleTouchMove, handleTouchEnd]);
+  }, [handleTouchStart, handleTouchMove, handleTouchEnd, handleTap]);
+
+  const isZoomed = scale > 1;
 
   return (
     <div
@@ -85,17 +160,15 @@ export default function SheetView({ sheetImage, title }) {
       {/* 악보 액자 */}
       <div
         ref={containerRef}
-        onClick={handleTap}
         style={{
           padding: "12px",
           opacity: loaded ? 1 : 0,
-          transform: loaded ? "translateY(0)" : "translateY(12px)",
-          transition: loaded
-            ? "opacity 0.6s ease-out, transform 0.6s ease-out"
-            : "opacity 0.6s ease-out, transform 0.6s ease-out",
-          touchAction: "pan-y",
+          transition: "opacity 0.6s ease-out",
+          touchAction: isZoomed ? "none" : "pan-y",
           userSelect: "none",
           WebkitUserSelect: "none",
+          position: "relative",
+          overflow: "hidden",
         }}
       >
         <div
@@ -118,30 +191,39 @@ export default function SheetView({ sheetImage, title }) {
               display: "block",
               backgroundColor: "#faf8f4",
               transformOrigin: "top center",
-              transform: `scale(${scale})`,
-              transition: pinchRef.current.active
+              transform: `scale(${scale}) translate(${translate.x}px, ${translate.y}px)`,
+              transition: pinchRef.current.active || panRef.current.active
                 ? "none"
                 : "transform 0.2s ease-out",
+              willChange: "transform",
             }}
           />
         </div>
 
-        {/* 줌 레벨 표시 (확대 시에만) */}
-        {scale > 1 && (
-          <div
+        {/* 줌 레벨 + 리셋 버튼 (확대 시에만) */}
+        {isZoomed && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setScale(1);
+              setTranslate({ x: 0, y: 0 });
+            }}
             style={{
               position: "absolute",
               bottom: "16px",
               right: "16px",
-              backgroundColor: "rgba(0,0,0,0.5)",
+              backgroundColor: "rgba(0,0,0,0.6)",
               color: "white",
               fontSize: "0.7rem",
-              padding: "4px 8px",
-              borderRadius: "12px",
+              padding: "6px 12px",
+              borderRadius: "16px",
+              border: "none",
+              cursor: "pointer",
+              zIndex: 10,
             }}
           >
-            {Math.round(scale * 100)}%
-          </div>
+            {Math.round(scale * 100)}% ✕
+          </button>
         )}
       </div>
 
