@@ -1,0 +1,93 @@
+
+/* ===== 미니멀 테마 (기본) ===== */
+[data-theme="minimal"] {
+  --bg-page: #f9fafb;
+  --bg-card: #ffffff;
+  --bg-header: #ffffff;
+  --bg-input: #ffffff;
+  --text-primary: #1f2937;
+  --text-secondary: #6b7280;
+  --text-hint: #9ca3af;
+  --text-muted: #d1d5db;
+  --border-light: #f3f4f6;
+  --border-default: #e5e7eb;
+  --accent: #374151;
+  --accent-text: #ffffff;
+}
+
+[data-theme="minimal"][data-dark="true"] {
+  --bg-page: #111827;
+  --bg-card: #1f2937;
+  --bg-header: #1f2937;
+  --bg-input: #374151;
+  --text-primary: #f3f4f6;
+  --text-secondary: #9ca3af;
+  --text-hint: #6b7280;
+  --text-muted: #4b5563;
+  --border-light: #374151;
+  --border-default: #4b5563;
+  --accent: #e5e7eb;
+  --accent-text: #111827;
+}
+
+/* ===== 종이결 테마 ===== */
+[data-theme="paper"] {
+  --bg-page: #faf6f0;
+  --bg-card: #fefcf8;
+  --bg-header: #fefcf8;
+  --bg-input: #fefcf8;
+  --text-primary: #3c2f1e;
+  --text-secondary: #7c6a52;
+  --text-hint: #a89878;
+  --text-muted: #d4c8b0;
+  --border-light: #efe8db;
+  --border-default: #e0d5c0;
+  --accent: #6b5033;
+  --accent-text: #fefcf8;
+}
+
+[data-theme="paper"][data-dark="true"] {
+  --bg-page: #1a1510;
+  --bg-card: #2a2318;
+  --bg-header: #2a2318;
+  --bg-input: #3a3020;
+  --text-primary: #efe8db;
+  --text-secondary: #a89878;
+  --text-hint: #7c6a52;
+  --text-muted: #5a4d3a;
+  --border-light: #3a3020;
+  --border-default: #5a4d3a;
+  --accent: #d4c8b0;
+  --accent-text: #1a1510;
+}
+
+/* ===== 모던 테마 ===== */
+[data-theme="modern"] {
+  --bg-page: #f0f4f8;
+  --bg-card: #ffffff;
+  --bg-header: #ffffff;
+  --bg-input: #ffffff;
+  --text-primary: #1a2b3c;
+  --text-secondary: #5a7184;
+  --text-hint: #8fa3b8;
+  --text-muted: #c4d0dc;
+  --border-light: #e4ecf4;
+  --border-default: #d0dce8;
+  --accent: #2c5282;
+  --accent-text: #ffffff;
+}
+
+[data-theme="modern"][data-dark="true"] {
+  --bg-page: #0f1923;
+  --bg-card: #1a2b3c;
+  --bg-header: #1a2b3c;
+  --bg-input: #2a3f52;
+  --text-primary: #e4ecf4;
+  --text-secondary: #8fa3b8;
+  --text-hint: #5a7184;
+  --text-muted: #3a5064;
+  --border-light: #2a3f52;
+  --border-default: #3a5064;
+  --accent: #90cdf4;
+  --accent-text: #0f1923;
+}
