@@ -50,7 +50,7 @@ export default function SheetView({ sheetImage, title }) {
               alt={`${title} 악보`}
               onLoad={() => setLoaded(true)}
               style={{
-                width: "100%",
+                width: "130%",
                 height: "auto",
                 display: "block",
                 backgroundColor: "#faf8f4",
