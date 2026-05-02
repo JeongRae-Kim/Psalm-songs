@@ -68,7 +68,6 @@ export default function SongDetailPage() {
   const [activeTab, setActiveTab] = useState("sheet");
   const [immersive, setImmersive] = useState(false);
 
-  // 상단·하단 높이 측정용 ref
   const headerRef = useRef(null);
   const footerRef = useRef(null);
   const [headerH, setHeaderH] = useState(88);
@@ -76,7 +75,6 @@ export default function SongDetailPage() {
 
   const song = songs.find((s) => s.id === id);
 
-  // 이전/다음 곡
   const currentIndex = useMemo(
     () => songs.findIndex((s) => s.id === id),
     [songs, id]
@@ -84,19 +82,16 @@ export default function SongDetailPage() {
   const prevSong = currentIndex > 0 ? songs[currentIndex - 1] : null;
   const nextSong = currentIndex < songs.length - 1 ? songs[currentIndex + 1] : null;
 
-  // 성경 본문 라벨
   const scriptureLabel = song
     ? song.psalmNumber
       ? `시편 ${song.psalmNumber}편 ${song.verseRange}`
       : `이사야 ${song.verseRange}`
     : "";
 
-  // 최근 본 곡 기록
   useEffect(() => {
     if (id) addRecent(id);
   }, [id, addRecent]);
 
-  // 상단·하단 높이 측정
   useEffect(() => {
     const measure = () => {
       if (headerRef.current) setHeaderH(headerRef.current.offsetHeight);
@@ -129,10 +124,7 @@ export default function SongDetailPage() {
     );
   }
 
-  // 몰입 모드일 때 하단 높이는 0
   const effectiveFooterH = immersive ? 0 : footerH;
-  // 몰입 모드일 때 상단은 1행만 (탭바 숨김)
-  const effectiveHeaderH = headerH;
 
   return (
     <div className="bg-page" style={{ overscrollBehavior: "none" }}>
@@ -225,7 +217,7 @@ export default function SongDetailPage() {
       <main
         style={{
           position: "fixed",
-          top: effectiveHeaderH,
+          top: headerH,
           bottom: effectiveFooterH,
           left: 0,
           right: 0,
@@ -260,61 +252,61 @@ export default function SongDetailPage() {
             zIndex: 50,
           }}
         >
+          {/* 하단 1줄: ◀ 목차 ▶ + 다운로드 — accent 배경색 */}
+          <div
+            style={{ backgroundColor: "var(--c-accent, #1e293b)" }}
+          >
+            <div className="max-w-3xl mx-auto flex items-center px-3 py-2">
+              <button
+                onClick={() => prevSong && navigate(`/song/${prevSong.id}`)}
+                disabled={!prevSong}
+                className={`shrink-0 p-1.5 rounded-full transition-colors
+                  ${prevSong
+                    ? "text-white/80 hover:text-white active:bg-white/10"
+                    : "text-white/20 cursor-not-allowed"
+                  }`}
+                title="이전 곡"
+              >
+                <PrevIcon />
+              </button>
+
+              <span className="flex-1 text-center text-xs font-medium text-white/90">
+                {scriptureLabel}
+              </span>
+
+              <button
+                onClick={() => nextSong && navigate(`/song/${nextSong.id}`)}
+                disabled={!nextSong}
+                className={`shrink-0 p-1.5 rounded-full transition-colors
+                  ${nextSong
+                    ? "text-white/80 hover:text-white active:bg-white/10"
+                    : "text-white/20 cursor-not-allowed"
+                  }`}
+                title="다음 곡"
+              >
+                <NextIcon />
+              </button>
+
+              <a
+                href={song.sheetPdf}
+                download
+                className="shrink-0 ml-2 p-1.5 rounded-full text-white/60
+                  hover:text-white active:bg-white/10
+                  transition-colors"
+                title="PDF 다운로드"
+              >
+                <DownloadIcon />
+              </a>
+            </div>
+          </div>
+
+          {/* 하단 2줄: 메모 */}
           <div className="bg-card border-t border-b-light">
-            <div className="max-w-3xl mx-auto">
-
-              {/* 하단 1줄: ◀ 목차 ▶ + 다운로드 */}
-              <div className="flex items-center px-3 py-2">
-                <button
-                  onClick={() => prevSong && navigate(`/song/${prevSong.id}`)}
-                  disabled={!prevSong}
-                  className={`shrink-0 p-1.5 rounded-full transition-colors
-                    ${prevSong
-                      ? "text-t-secondary hover:text-t-primary hover:bg-gray-100 active:bg-gray-200"
-                      : "text-t-muted/30 cursor-not-allowed"
-                    }`}
-                  title="이전 곡"
-                >
-                  <PrevIcon />
-                </button>
-
-                <span className="flex-1 text-center text-xs font-medium text-t-secondary">
-                  {scriptureLabel}
-                </span>
-
-                <button
-                  onClick={() => nextSong && navigate(`/song/${nextSong.id}`)}
-                  disabled={!nextSong}
-                  className={`shrink-0 p-1.5 rounded-full transition-colors
-                    ${nextSong
-                      ? "text-t-secondary hover:text-t-primary hover:bg-gray-100 active:bg-gray-200"
-                      : "text-t-muted/30 cursor-not-allowed"
-                    }`}
-                  title="다음 곡"
-                >
-                  <NextIcon />
-                </button>
-
-                <a
-                  href={song.sheetPdf}
-                  download
-                  className="shrink-0 ml-2 p-1.5 rounded-full text-t-hint
-                    hover:text-t-primary hover:bg-gray-100 active:bg-gray-200
-                    transition-colors"
-                  title="PDF 다운로드"
-                >
-                  <DownloadIcon />
-                </a>
-              </div>
-
-              {/* 하단 2줄: 메모 */}
-              <div className="px-3 pb-2">
-                <MemoEditor
-                  value={getMemo(song.id)}
-                  onSave={(text) => saveMemo(song.id, text)}
-                />
-              </div>
-
+            <div className="max-w-3xl mx-auto px-3 py-2">
+              <MemoEditor
+                value={getMemo(song.id)}
+                onSave={(text) => saveMemo(song.id, text)}
+              />
             </div>
           </div>
         </div>

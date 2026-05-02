@@ -1,6 +1,13 @@
-
 import { useNavigate } from "react-router-dom";
 import { useTheme } from "../contexts/ThemeContext";
+
+const HomeIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+    <polyline points="9 22 9 12 15 12 15 22" />
+  </svg>
+);
 
 const THEMES = [
   { key: "minimal", label: "미니멀", desc: "깔끔한 흰색 톤" },
@@ -38,9 +45,10 @@ export default function SettingsPage() {
         <div className="max-w-3xl mx-auto flex items-center gap-3">
           <button
             onClick={() => navigate("/")}
-            className="text-t-hint hover:text-t-primary transition-colors text-sm"
+            className="text-t-hint hover:text-t-primary transition-colors"
+            title="홈으로"
           >
-            ← 목록
+            <HomeIcon />
           </button>
           <span className="w-px h-4 bg-b-default" />
           <h1 className="text-xl font-bold text-t-primary">설정</h1>
@@ -110,7 +118,7 @@ export default function SettingsPage() {
                 onClick={() => setFont(f.key)}
                 className={`flex-1 text-center py-2.5 text-sm rounded-lg
                   transition-colors border
-                  ${font === f.key 
+                  ${font === f.key
                     ? "bg-accent text-accent-text border-accent"
                     : "bg-card text-t-primary border-b-light hover:border-b-default"
                   }`}
@@ -131,7 +139,7 @@ export default function SettingsPage() {
                 onClick={() => setFontSize(s.key)}
                 className={`flex-1 text-center py-2.5 text-sm rounded-lg
                   transition-colors border
-                  ${fontSize === s.key 
+                  ${fontSize === s.key
                     ? "bg-accent text-accent-text border-accent"
                     : "bg-card text-t-primary border-b-light hover:border-b-default"
                   }`}
