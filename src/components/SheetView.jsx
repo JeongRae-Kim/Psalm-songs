@@ -13,8 +13,9 @@ export default function SheetView({ sheetImage, title }) {
     >
       {/* 악보 액자 — 페이드인 애니메이션 */}
       <div
-        className="p-3"
         style={{
+          width: "130%",
+          padding: "12px",
           opacity: loaded ? 1 : 0,
           transform: loaded ? "translateY(0)" : "translateY(12px)",
           transition: "opacity 0.6s ease-out, transform 0.6s ease-out",
@@ -50,7 +51,7 @@ export default function SheetView({ sheetImage, title }) {
               alt={`${title} 악보`}
               onLoad={() => setLoaded(true)}
               style={{
-                width: "130%",
+                width: "100%",
                 height: "auto",
                 display: "block",
                 backgroundColor: "#faf8f4",
