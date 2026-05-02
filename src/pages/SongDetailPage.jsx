@@ -81,19 +81,9 @@ export default function SongDetailPage() {
         </div>
       </header>
 
-      {/* 탭 바 */}
+      {/* 탭 바: 악보 → 가사 순서 */}
       <div className="bg-card border-b border-b-light">
         <div className="max-w-3xl mx-auto flex">
-          <button
-            onClick={() => setActiveTab("lyrics")}
-            className={`flex-1 text-center py-3 text-sm font-medium transition-colors
-              ${activeTab === "lyrics"
-                ? "text-t-primary border-b-2 border-gray-800"
-                : "text-t-hint hover:text-t-secondary"
-              }`}
-          >
-            가사
-          </button>
           <button
             onClick={() => setActiveTab("sheet")}
             className={`flex-1 text-center py-3 text-sm font-medium transition-colors
@@ -104,20 +94,30 @@ export default function SongDetailPage() {
           >
             악보
           </button>
+          <button
+            onClick={() => setActiveTab("lyrics")}
+            className={`flex-1 text-center py-3 text-sm font-medium transition-colors
+              ${activeTab === "lyrics"
+                ? "text-t-primary border-b-2 border-gray-800"
+                : "text-t-hint hover:text-t-secondary"
+              }`}
+          >
+            가사
+          </button>
         </div>
       </div>
 
       {/* 탭 내용 */}
       <main className="max-w-3xl mx-auto">
-        {activeTab === "lyrics" && (
-          <LyricsView verses={song.verses} />
-        )}
         {activeTab === "sheet" && (
           <SheetView
             sheetImage={song.sheetImage}
             sheetPdf={song.sheetPdf}
             title={song.title}
           />
+        )}
+        {activeTab === "lyrics" && (
+          <LyricsView verses={song.verses} />
         )}
 
         {/* 메모 */}
