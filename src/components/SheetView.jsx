@@ -1,8 +1,79 @@
-import { useState } from "react";
-import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
+import { useState, useRef, useCallback, useEffect } from "react";
 
 export default function SheetView({ sheetImage, title }) {
   const [loaded, setLoaded] = useState(false);
+  const [scale, setScale] = useState(1);
+  const containerRef = useRef(null);
+  const imgRef = useRef(null);
+
+  // 핀치 줌 상태 추적
+  const pinchRef = useRef({
+    active: false,
+    initialDistance: 0,
+    initialScale: 1,
+  });
+
+  // 두 손가락 사이 거리 계산
+  const getDistance = (touches) => {
+    const dx = touches[0].clientX - touches[1].clientX;
+    const dy = touches[0].clientY - touches[1].clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+  };
+
+  const handleTouchStart = useCallback((e) => {
+    if (e.touches.length === 2) {
+      e.preventDefault();
+      pinchRef.current = {
+        active: true,
+        initialDistance: getDistance(e.touches),
+        initialScale: scale,
+      };
+    }
+  }, [scale]);
+
+  const handleTouchMove = useCallback((e) => {
+    if (e.touches.length === 2 && pinchRef.current.active) {
+      e.preventDefault();
+      const currentDistance = getDistance(e.touches);
+      const ratio = currentDistance / pinchRef.current.initialDistance;
+      const newScale = Math.min(Math.max(pinchRef.current.initialScale * ratio, 1), 3);
+      setScale(newScale);
+    }
+  }, []);
+
+  const handleTouchEnd = useCallback(() => {
+    pinchRef.current.active = false;
+  }, []);
+
+  // 더블탭 줌 토글
+  const lastTapRef = useRef(0);
+  const handleTap = useCallback((e) => {
+    const now = Date.now();
+    if (now - lastTapRef.current < 300) {
+      e.preventDefault();
+      setScale((prev) => (prev > 1 ? 1 : 2));
+    }
+    lastTapRef.current = now;
+  }, []);
+
+  // 터치 이벤트 등록 (passive: false 필요)
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const opts = { passive: false };
+    el.addEventListener("touchstart", handleTouchStart, opts);
+    el.addEventListener("touchmove", handleTouchMove, opts);
+    el.addEventListener("touchend", handleTouchEnd);
+    el.addEventListener("touchcancel", handleTouchEnd);
+
+    return () => {
+      el.removeEventListener("touchstart", handleTouchStart);
+      el.removeEventListener("touchmove", handleTouchMove);
+      el.removeEventListener("touchend", handleTouchEnd);
+      el.removeEventListener("touchcancel", handleTouchEnd);
+    };
+  }, [handleTouchStart, handleTouchMove, handleTouchEnd]);
 
   return (
     <div
@@ -11,55 +82,67 @@ export default function SheetView({ sheetImage, title }) {
         minHeight: "100%",
       }}
     >
-      {/* 악보 액자 — 페이드인 애니메이션 */}
+      {/* 악보 액자 */}
       <div
+        ref={containerRef}
+        onClick={handleTap}
         style={{
-          width: "130%",
           padding: "12px",
           opacity: loaded ? 1 : 0,
           transform: loaded ? "translateY(0)" : "translateY(12px)",
-          transition: "opacity 0.6s ease-out, transform 0.6s ease-out",
+          transition: loaded
+            ? "opacity 0.6s ease-out, transform 0.6s ease-out"
+            : "opacity 0.6s ease-out, transform 0.6s ease-out",
+          touchAction: "pan-y",
+          userSelect: "none",
+          WebkitUserSelect: "none",
         }}
       >
-        <TransformWrapper
-          initialScale={1}
-          minScale={0.5}
-          maxScale={3}
-          doubleClick={{ mode: "toggle", step: 0.7 }}
-          centerOnInit={false}
-          limitToBounds={true}
-          panning={{ disabled: true }}
-          alignmentAnimation={{ sizeX: 0, sizeY: 0 }}
+        <div
+          style={{
+            borderRadius: "8px",
+            boxShadow:
+              "0 8px 32px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.3)",
+            overflow: "hidden",
+          }}
         >
-          <TransformComponent
-            wrapperStyle={{
+          <img
+            ref={imgRef}
+            src={sheetImage}
+            alt={`${title} 악보`}
+            onLoad={() => setLoaded(true)}
+            draggable={false}
+            style={{
               width: "100%",
-              overflow: "hidden",
-              borderRadius: "8px",
-              boxShadow:
-                "0 8px 32px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.3)",
+              height: "auto",
+              display: "block",
+              backgroundColor: "#faf8f4",
+              transformOrigin: "top center",
+              transform: `scale(${scale})`,
+              transition: pinchRef.current.active
+                ? "none"
+                : "transform 0.2s ease-out",
             }}
-            contentStyle={{
-              width: "100%",
-              display: "flex",
-              justifyContent: "center",
-              transformOrigin: "top left",
+          />
+        </div>
+
+        {/* 줌 레벨 표시 (확대 시에만) */}
+        {scale > 1 && (
+          <div
+            style={{
+              position: "absolute",
+              bottom: "16px",
+              right: "16px",
+              backgroundColor: "rgba(0,0,0,0.5)",
+              color: "white",
+              fontSize: "0.7rem",
+              padding: "4px 8px",
+              borderRadius: "12px",
             }}
           >
-            <img
-              src={sheetImage}
-              alt={`${title} 악보`}
-              onLoad={() => setLoaded(true)}
-              style={{
-                width: "100%",
-                height: "auto",
-                display: "block",
-                backgroundColor: "#faf8f4",
-                borderRadius: "8px",
-              }}
-            />
-          </TransformComponent>
-        </TransformWrapper>
+            {Math.round(scale * 100)}%
+          </div>
+        )}
       </div>
 
       {/* 로딩 중 표시 */}
