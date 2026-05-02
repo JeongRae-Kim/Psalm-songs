@@ -180,7 +180,7 @@ export default function SongDetailPage() {
         {!immersive && (
           <div
             className="border-b border-b-light"
-            style={{ backgroundColor: "var(--c-accent, #1e293b)" }}
+            style={{ backgroundColor: "var(--accent, #374151)" }}
           >
             <div className="max-w-3xl mx-auto flex items-center">
               <button
@@ -252,9 +252,9 @@ export default function SongDetailPage() {
             zIndex: 50,
           }}
         >
-          {/* 하단 1줄: ◀ 목차 ▶ + 다운로드 — accent 배경색 */}
+          {/* 하단 1줄: ◀ 목차 ▶ + 다운로드 — accent 배경색 (테마 연동) */}
           <div
-            style={{ backgroundColor: "var(--c-accent, #1e293b)" }}
+            style={{ backgroundColor: "var(--accent, #374151)" }}
           >
             <div className="max-w-3xl mx-auto flex items-center px-3 py-2">
               <button
