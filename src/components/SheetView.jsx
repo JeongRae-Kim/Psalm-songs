@@ -6,9 +6,9 @@ export default function SheetView({ sheetImage, title }) {
 
   return (
     <div
-      className="w-full h-full overflow-auto"
       style={{
         background: "linear-gradient(135deg, #1e293b 0%, #334155 50%, #1e293b 100%)",
+        minHeight: "100%",
       }}
     >
       {/* 악보 액자 — 페이드인 애니메이션 */}
