@@ -38,26 +38,23 @@ export default function SheetView({ sheetImage, title }) {
 
     const imgW = img.offsetWidth;
     const imgH = img.offsetHeight;
-    const containerW = container.offsetWidth - 24; // padding 12px * 2
+    const containerW = container.offsetWidth;
     const containerH = container.offsetHeight;
 
-    // 확대된 이미지 크기
     const scaledW = imgW * s;
     const scaledH = imgH * s;
 
-    // 이동 가능 범위 (확대로 넘치는 부분만큼)
     const maxX = Math.max(0, (scaledW - containerW) / 2 / s);
     const maxY = Math.max(0, (scaledH - containerH) / 2 / s);
 
     return {
       x: Math.min(maxX, Math.max(-maxX, tx)),
-      y: Math.min(0, Math.max(-maxY * 2, ty)), // 위로는 이동 제한, 아래로만
+      y: Math.min(0, Math.max(-maxY * 2, ty)),
     };
   }, []);
 
   const handleTouchStart = useCallback((e) => {
     if (e.touches.length === 2) {
-      // 핀치 줌 시작
       e.preventDefault();
       pinchRef.current = {
         active: true,
@@ -66,7 +63,6 @@ export default function SheetView({ sheetImage, title }) {
       };
       panRef.current.active = false;
     } else if (e.touches.length === 1 && scale > 1) {
-      // 확대 상태에서 한 손 패닝 시작
       e.preventDefault();
       panRef.current = {
         active: true,
@@ -80,19 +76,16 @@ export default function SheetView({ sheetImage, title }) {
 
   const handleTouchMove = useCallback((e) => {
     if (e.touches.length === 2 && pinchRef.current.active) {
-      // 핀치 줌 중
       e.preventDefault();
       const currentDistance = getDistance(e.touches);
       const ratio = currentDistance / pinchRef.current.initialDistance;
       const newScale = Math.min(Math.max(pinchRef.current.initialScale * ratio, 1), 3);
       setScale(newScale);
 
-      // 축소 시 translate도 보정
       if (newScale <= 1) {
         setTranslate({ x: 0, y: 0 });
       }
     } else if (e.touches.length === 1 && panRef.current.active && scale > 1) {
-      // 확대 상태에서 한 손 패닝 중
       e.preventDefault();
       const dx = (e.touches[0].clientX - panRef.current.startX) / scale;
       const dy = (e.touches[0].clientY - panRef.current.startY) / scale;
@@ -111,7 +104,6 @@ export default function SheetView({ sheetImage, title }) {
   // 더블탭 줌 토글
   const lastTapRef = useRef(0);
   const handleTap = useCallback((e) => {
-    // 핀치나 패닝 직후에는 무시
     if (e.touches && e.touches.length > 0) return;
     const now = Date.now();
     if (now - lastTapRef.current < 300) {
@@ -153,15 +145,14 @@ export default function SheetView({ sheetImage, title }) {
   return (
     <div
       style={{
-        background: "linear-gradient(135deg, #1e293b 0%, #334155 50%, #1e293b 100%)",
+        backgroundColor: "#faf8f4",
         minHeight: "100%",
       }}
     >
-      {/* 악보 액자 */}
+      {/* 악보 — 여백 없이 꽉 차게 */}
       <div
         ref={containerRef}
         style={{
-          padding: "12px",
           opacity: loaded ? 1 : 0,
           transition: "opacity 0.6s ease-out",
           touchAction: isZoomed ? "none" : "pan-y",
@@ -171,34 +162,25 @@ export default function SheetView({ sheetImage, title }) {
           overflow: "hidden",
         }}
       >
-        <div
+        <img
+          ref={imgRef}
+          src={sheetImage}
+          alt={`${title} 악보`}
+          onLoad={() => setLoaded(true)}
+          draggable={false}
           style={{
-            borderRadius: "8px",
-            boxShadow:
-              "0 8px 32px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.3)",
-            overflow: "hidden",
+            width: "100%",
+            height: "auto",
+            display: "block",
+            backgroundColor: "#faf8f4",
+            transformOrigin: "top center",
+            transform: `scale(${scale}) translate(${translate.x}px, ${translate.y}px)`,
+            transition: pinchRef.current.active || panRef.current.active
+              ? "none"
+              : "transform 0.2s ease-out",
+            willChange: "transform",
           }}
-        >
-          <img
-            ref={imgRef}
-            src={sheetImage}
-            alt={`${title} 악보`}
-            onLoad={() => setLoaded(true)}
-            draggable={false}
-            style={{
-              width: "100%",
-              height: "auto",
-              display: "block",
-              backgroundColor: "#faf8f4",
-              transformOrigin: "top center",
-              transform: `scale(${scale}) translate(${translate.x}px, ${translate.y}px)`,
-              transition: pinchRef.current.active || panRef.current.active
-                ? "none"
-                : "transform 0.2s ease-out",
-              willChange: "transform",
-            }}
-          />
-        </div>
+        />
 
         {/* 줌 레벨 + 리셋 버튼 (확대 시에만) */}
         {isZoomed && (
@@ -230,7 +212,7 @@ export default function SheetView({ sheetImage, title }) {
       {/* 로딩 중 표시 */}
       {!loaded && (
         <div className="flex items-center justify-center py-20">
-          <p style={{ color: "rgba(255,255,255,0.5)", fontSize: "0.8rem" }}>
+          <p style={{ color: "rgba(0,0,0,0.3)", fontSize: "0.8rem" }}>
             악보를 불러오는 중…
           </p>
         </div>
