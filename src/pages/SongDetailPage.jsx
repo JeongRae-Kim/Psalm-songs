@@ -126,6 +126,38 @@ export default function SongDetailPage() {
 
   const effectiveFooterH = immersive ? 0 : footerH;
 
+  /* 탭 버튼 스타일 */
+  const tabBase = {
+    flex: 1,
+    textAlign: "center",
+    padding: "10px 0",
+    fontSize: "0.875rem",
+    fontWeight: 500,
+    cursor: "pointer",
+    border: "none",
+    background: "none",
+    position: "relative",
+    lineHeight: "1",
+  };
+
+  const tabActive = {
+    color: "white",
+  };
+
+  const tabInactive = {
+    color: "rgba(255,255,255,0.5)",
+  };
+
+  /* 활성 탭 밑줄 (pseudo-element 대체) */
+  const tabUnderline = {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: "2px",
+    backgroundColor: "white",
+  };
+
   return (
     <div className="bg-page" style={{ overscrollBehavior: "none" }}>
 
@@ -179,34 +211,59 @@ export default function SongDetailPage() {
         {/* 2행: 악보 탭 + 성경 본문 + 가사 탭 (몰입 시 숨김) */}
         {!immersive && (
           <div
-            className="border-b border-b-light"
-            style={{ backgroundColor: "var(--accent, #374151)" }}
+            style={{
+              backgroundColor: "var(--accent, #374151)",
+              display: "flex",
+              alignItems: "center",
+              height: "40px",
+            }}
           >
-            <div className="max-w-3xl mx-auto flex items-center">
+            <div
+              style={{
+                maxWidth: "48rem",
+                margin: "0 auto",
+                width: "100%",
+                display: "flex",
+                alignItems: "center",
+                height: "100%",
+              }}
+            >
+              {/* 악보 탭 */}
               <button
                 onClick={() => setActiveTab("sheet")}
-                className={`flex-1 text-center py-2.5 text-sm font-medium transition-colors
-                  ${activeTab === "sheet"
-                    ? "text-white border-b-2 border-white"
-                    : "text-white/60 hover:text-white/80"
-                  }`}
+                style={{
+                  ...tabBase,
+                  ...(activeTab === "sheet" ? tabActive : tabInactive),
+                }}
               >
                 악보
+                {activeTab === "sheet" && <span style={tabUnderline} />}
               </button>
 
-              <span className="text-white/90 text-xs font-medium px-2 whitespace-nowrap">
+              {/* 성경 본문 */}
+              <span
+                style={{
+                  color: "rgba(255,255,255,0.9)",
+                  fontSize: "0.75rem",
+                  fontWeight: 500,
+                  padding: "0 8px",
+                  whiteSpace: "nowrap",
+                  lineHeight: "1",
+                }}
+              >
                 {scriptureLabel}
               </span>
 
+              {/* 가사 탭 */}
               <button
                 onClick={() => setActiveTab("lyrics")}
-                className={`flex-1 text-center py-2.5 text-sm font-medium transition-colors
-                  ${activeTab === "lyrics"
-                    ? "text-white border-b-2 border-white"
-                    : "text-white/60 hover:text-white/80"
-                  }`}
+                style={{
+                  ...tabBase,
+                  ...(activeTab === "lyrics" ? tabActive : tabInactive),
+                }}
               >
                 가사
+                {activeTab === "lyrics" && <span style={tabUnderline} />}
               </button>
             </div>
           </div>
@@ -252,7 +309,7 @@ export default function SongDetailPage() {
             zIndex: 50,
           }}
         >
-          {/* 하단 1줄: ◀ 목차 ▶ + 다운로드 — accent 배경색 (테마 연동) */}
+          {/* 하단 1줄: ◀ 목차 ▶ + 다운로드 — accent 배경색 */}
           <div
             style={{ backgroundColor: "var(--accent, #374151)" }}
           >
