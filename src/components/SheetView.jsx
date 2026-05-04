@@ -45,11 +45,14 @@ export default function SheetView({ sheetImage, title }) {
     const scaledH = imgH * s;
 
     const maxX = Math.max(0, (scaledW - containerW) / 2 / s);
-    const maxY = Math.max(0, (scaledH - containerH) / 2 / s);
+
+    // 상단 고정: y는 0 이하만 허용 (위로 이동 불가)
+    // 하단 제한: 악보 아래쪽 끝까지만 이동 가능
+    const maxY = Math.max(0, (scaledH - containerH) / s);
 
     return {
       x: Math.min(maxX, Math.max(-maxX, tx)),
-      y: Math.min(0, Math.max(-maxY * 2, ty)),
+      y: Math.min(0, Math.max(-maxY, ty)),
     };
   }, []);
 
