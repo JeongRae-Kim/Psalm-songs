@@ -44,17 +44,28 @@ export default function SheetView({ sheetImage, title }) {
     const scaledW = imgW * s;
     const scaledH = imgH * s;
 
+    // 좌우 제한
     const maxX = Math.max(0, (scaledW - containerW) / 2 / s);
 
-    // 상단 고정: y는 0 이하만 허용 (위로 이동 불가)
-    // 하단 제한: 악보 아래쪽 끝까지만 이동 가능
-    const maxY = Math.max(0, (scaledH - containerH) / s);
+    // 상단 절대 고정: ty는 0 이하만 허용 (양수 = 위로 이동 = 차단)
+    // 하단 제한: 확대된 이미지 하단까지만
+    const minY = -Math.max(0, (scaledH - containerH) / s);
 
     return {
       x: Math.min(maxX, Math.max(-maxX, tx)),
-      y: Math.min(0, Math.max(-maxY, ty)),
+      y: Math.max(minY, Math.min(0, ty)),
     };
   }, []);
+
+  // 확대 시에도 translate 보정
+  const handleScaleChange = useCallback((newScale) => {
+    setScale(newScale);
+    if (newScale <= 1) {
+      setTranslate({ x: 0, y: 0 });
+    } else {
+      setTranslate(prev => clampTranslate(prev.x, prev.y, newScale));
+    }
+  }, [clampTranslate]);
 
   const handleTouchStart = useCallback((e) => {
     if (e.touches.length === 2) {
@@ -83,11 +94,7 @@ export default function SheetView({ sheetImage, title }) {
       const currentDistance = getDistance(e.touches);
       const ratio = currentDistance / pinchRef.current.initialDistance;
       const newScale = Math.min(Math.max(pinchRef.current.initialScale * ratio, 1), 3);
-      setScale(newScale);
-
-      if (newScale <= 1) {
-        setTranslate({ x: 0, y: 0 });
-      }
+      handleScaleChange(newScale);
     } else if (e.touches.length === 1 && panRef.current.active && scale > 1) {
       e.preventDefault();
       const dx = (e.touches[0].clientX - panRef.current.startX) / scale;
@@ -97,7 +104,7 @@ export default function SheetView({ sheetImage, title }) {
       const clamped = clampTranslate(newTx, newTy, scale);
       setTranslate(clamped);
     }
-  }, [scale, clampTranslate]);
+  }, [scale, clampTranslate, handleScaleChange]);
 
   const handleTouchEnd = useCallback(() => {
     pinchRef.current.active = false;
@@ -122,7 +129,44 @@ export default function SheetView({ sheetImage, title }) {
     lastTapRef.current = now;
   }, [scale]);
 
-  // 터치 이벤트 등록
+  // 마우스 휠 줌 (데스크탑에서 확인용)
+  const handleWheel = useCallback((e) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -0.1 : 0.1;
+    const newScale = Math.min(Math.max(scale + delta, 1), 3);
+    handleScaleChange(newScale);
+  }, [scale, handleScaleChange]);
+
+  // 마우스 드래그 (데스크탑에서 확인용)
+  const mouseRef = useRef({ active: false, startX: 0, startY: 0, startTx: 0, startTy: 0 });
+
+  const handleMouseDown = useCallback((e) => {
+    if (scale <= 1) return;
+    e.preventDefault();
+    mouseRef.current = {
+      active: true,
+      startX: e.clientX,
+      startY: e.clientY,
+      startTx: translate.x,
+      startTy: translate.y,
+    };
+  }, [scale, translate]);
+
+  const handleMouseMove = useCallback((e) => {
+    if (!mouseRef.current.active || scale <= 1) return;
+    const dx = (e.clientX - mouseRef.current.startX) / scale;
+    const dy = (e.clientY - mouseRef.current.startY) / scale;
+    const newTx = mouseRef.current.startTx + dx;
+    const newTy = mouseRef.current.startTy + dy;
+    const clamped = clampTranslate(newTx, newTy, scale);
+    setTranslate(clamped);
+  }, [scale, clampTranslate]);
+
+  const handleMouseUp = useCallback(() => {
+    mouseRef.current.active = false;
+  }, []);
+
+  // 이벤트 등록
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -133,6 +177,10 @@ export default function SheetView({ sheetImage, title }) {
     el.addEventListener("touchend", handleTouchEnd);
     el.addEventListener("touchcancel", handleTouchEnd);
     el.addEventListener("click", handleTap);
+    el.addEventListener("wheel", handleWheel, opts);
+    el.addEventListener("mousedown", handleMouseDown);
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
 
     return () => {
       el.removeEventListener("touchstart", handleTouchStart);
@@ -140,8 +188,12 @@ export default function SheetView({ sheetImage, title }) {
       el.removeEventListener("touchend", handleTouchEnd);
       el.removeEventListener("touchcancel", handleTouchEnd);
       el.removeEventListener("click", handleTap);
+      el.removeEventListener("wheel", handleWheel);
+      el.removeEventListener("mousedown", handleMouseDown);
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [handleTouchStart, handleTouchMove, handleTouchEnd, handleTap]);
+  }, [handleTouchStart, handleTouchMove, handleTouchEnd, handleTap, handleWheel, handleMouseDown, handleMouseMove, handleMouseUp]);
 
   const isZoomed = scale > 1;
 
@@ -152,7 +204,7 @@ export default function SheetView({ sheetImage, title }) {
         minHeight: "100%",
       }}
     >
-      {/* 악보 — 여백 없이 꽉 차게 */}
+      {/* 악보 */}
       <div
         ref={containerRef}
         style={{
@@ -163,6 +215,7 @@ export default function SheetView({ sheetImage, title }) {
           WebkitUserSelect: "none",
           position: "relative",
           overflow: "hidden",
+          cursor: isZoomed ? "grab" : "default",
         }}
       >
         <img
@@ -178,14 +231,14 @@ export default function SheetView({ sheetImage, title }) {
             backgroundColor: "#faf8f4",
             transformOrigin: "top center",
             transform: `scale(${scale}) translate(${translate.x}px, ${translate.y}px)`,
-            transition: pinchRef.current.active || panRef.current.active
+            transition: pinchRef.current.active || panRef.current.active || mouseRef.current.active
               ? "none"
               : "transform 0.2s ease-out",
             willChange: "transform",
           }}
         />
 
-        {/* 줌 레벨 + 리셋 버튼 (확대 시에만) */}
+        {/* 줌 레벨 + 리셋 버튼 */}
         {isZoomed && (
           <button
             onClick={(e) => {
@@ -212,7 +265,7 @@ export default function SheetView({ sheetImage, title }) {
         )}
       </div>
 
-      {/* 로딩 중 표시 */}
+      {/* 로딩 중 */}
       {!loaded && (
         <div className="flex items-center justify-center py-20">
           <p style={{ color: "rgba(0,0,0,0.3)", fontSize: "0.8rem" }}>
