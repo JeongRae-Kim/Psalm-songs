@@ -1,6 +1,6 @@
 {
-  "version": "1.0",
-  "lastUpdated": "2026-05-02",
+  "version": "1.1",
+  "lastUpdated": "2026-05-06",
   "songs": [
     {
       "id": "psalm-40",
@@ -117,6 +117,32 @@
       ],
       "sheetImage": "/sheets/psalm-42-6.png",
       "sheetPdf": "/sheets/psalm-42-6.pdf"
+    },
+    {
+      "id": "psalm-84",
+      "psalmNumber": 84,
+      "verseRange": "9-12절",
+      "title": "우리의 방패를 보옵소서",
+      "tuneName": "ANGELS' SONG",
+      "meter": "변박 (1/4, 4/4, 3/4)",
+      "composer": "A.H.Mann",
+      "arranger": "서창원",
+      "arrangedYear": 2001,
+      "scripture": "시편 84편 9-12절",
+      "verses": [
+        {
+          "number": 1,
+          "text": "우리의 방패이신 여호와 하나님\n주 기름 부으신 자의 얼굴을\n살펴보옵소서\n주님의 궁정에서 한 날\n있는 것이 천 날 다른 곳보다\n복이 있나이다"
+        },
+        {
+          "number": 2,
+          "text": "악인의 장막에서 장수함보다도\n주님의 궁정에서 문지기하옴이\n무엇과도 바꿀 수 없이 좋사오니\n복 있는 자 누구랴\n나의 주 하나님"
+        }
+      ],
+      "sheetImage": "/sheets/psalm-084.png",
+      "sheetPdf": "/sheets/psalm-084.pdf",
+      "midiFile": "/midi/psalm-084-piano.mid",
+      "mxlFile": "/mxl/psalm-084-piano.mxl"
     },
     {
       "id": "psalm-90",
