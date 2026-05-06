@@ -93,7 +93,7 @@ export default function SongDetailPage() {
 
   const hasMidi = Boolean(song?.midiFile);
   const hasMxl = Boolean(song?.mxlFile);
-  const hasPractice = hasMidi && hasMxl;
+  const hasPractice = hasMxl;
 
   const midi = useMidiPlayer(hasMidi ? song.midiFile : null);
 
