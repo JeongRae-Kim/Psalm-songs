@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>HomeIcon 미리보기 - 시편 찬송 앱</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+    background: #f5f1ea;
+    color: #2a2a2a;
+    padding: 24px;
+  }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  p.sub { color: #6b6258; margin: 0 0 24px; font-size: 13px; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+  }
+  .card {
+    border-radius: 12px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+  .card .label { font-size: 12px; opacity: 0.7; }
+  .card .size  { font-size: 11px; opacity: 0.5; font-family: ui-monospace, Menlo, monospace; }
+
+  /* 양의문교회 헤더 분위기 (어두운 세피아) */
+  .header-mock {
+    background: linear-gradient(135deg, #6b4a35 0%, #4a3322 100%);
+    color: #f5e8d4;
+  }
+  /* 라이트 카드 */
+  .light  { background: #ffffff; color: #3a2e22; }
+  /* 다크 카드 */
+  .dark   { background: #1f1a14; color: #f5e8d4; }
+  /* 음표 강조색 */
+  .accent { background: #fdf6ea; color: #b8763c; }
+
+  /* 실제 헤더 시뮬레이션 */
+  .header {
+    margin-top: 32px;
+    background: linear-gradient(135deg, #6b4a35 0%, #4a3322 100%);
+    color: #f5e8d4;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    border-radius: 10px;
+  }
+  .icon-btn {
+    width: 40px; height: 40px;
+    border: none; background: transparent;
+    color: inherit;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 8px; cursor: pointer;
+  }
+  .icon-btn:hover { background: rgba(255,255,255,0.08); }
+  .header .title { flex: 1; text-align: center; font-size: 15px; font-weight: 600; }
+
+  .placeholder {
+    width: 22px; height: 22px;
+    border: 1.5px dashed currentColor; border-radius: 4px; opacity: 0.4;
+  }
+
+  hr { border: none; border-top: 1px solid #e0d8cc; margin: 32px 0 16px; }
+</style>
+</head>
+<body>
+
+<h1>HomeIcon 미리보기 - 옵션 B (교회 실루엣 + 십자가)</h1>
+<p class="sub">시편 찬송 앱 헤더 좌측 "곡 목록으로" 버튼용 / viewBox 24x24 / stroke="currentColor"</p>
+
+<div class="grid">
+
+  <div class="card header-mock">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="12" y1="1.5" x2="12" y2="6"/>
+      <line x1="10" y1="3.25" x2="14" y2="3.25"/>
+      <path d="M3 11 L12 6 L21 11 L21 21 L3 21 Z"/>
+      <path d="M10 21 L10 17 Q10 14.8 12 14.8 Q14 14.8 14 17 L14 21"/>
+    </svg>
+    <div class="label">실제 헤더 색상</div>
+    <div class="size">22 × 22 / stroke 2</div>
+  </div>
+
+  <div class="card light">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="12" y1="1.5" x2="12" y2="6"/>
+      <line x1="10" y1="3.25" x2="14" y2="3.25"/>
+      <path d="M3 11 L12 6 L21 11 L21 21 L3 21 Z"/>
+      <path d="M10 21 L10 17 Q10 14.8 12 14.8 Q14 14.8 14 17 L14 21"/>
+    </svg>
+    <div class="label">라이트 배경</div>
+    <div class="size">24 × 24 / stroke 2</div>
+  </div>
+
+  <div class="card dark">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="12" y1="1.5" x2="12" y2="6"/>
+      <line x1="10" y1="3.25" x2="14" y2="3.25"/>
+      <path d="M3 11 L12 6 L21 11 L21 21 L3 21 Z"/>
+      <path d="M10 21 L10 17 Q10 14.8 12 14.8 Q14 14.8 14 17 L14 21"/>
+    </svg>
+    <div class="label">다크 + 가는 stroke</div>
+    <div class="size">24 × 24 / stroke 1.75</div>
+  </div>
+
+  <div class="card accent">
+    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="12" y1="1.5" x2="12" y2="6"/>
+      <line x1="10" y1="3.25" x2="14" y2="3.25"/>
+      <path d="M3 11 L12 6 L21 11 L21 21 L3 21 Z"/>
+      <path d="M10 21 L10 17 Q10 14.8 12 14.8 Q14 14.8 14 17 L14 21"/>
+    </svg>
+    <div class="label">강조색 (호버/탭 상태 예시)</div>
+    <div class="size">32 × 32 / stroke 2</div>
+  </div>
+
+</div>
+
+<hr>
+
+<h1 style="margin-top:0;">실제 헤더 시뮬레이션</h1>
+<p class="sub">홈 버튼 + 가운데 곡명 + 우측 액션 영역 (다른 아이콘 자리는 점선 박스로 표시)</p>
+
+<div class="header">
+  <button class="icon-btn" aria-label="곡 목록으로">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="12" y1="1.5" x2="12" y2="6"/>
+      <line x1="10" y1="3.25" x2="14" y2="3.25"/>
+      <path d="M3 11 L12 6 L21 11 L21 21 L3 21 Z"/>
+      <path d="M10 21 L10 17 Q10 14.8 12 14.8 Q14 14.8 14 17 L14 21"/>
+    </svg>
+  </button>
+  <div class="title">시편 23편</div>
+  <button class="icon-btn" aria-label="즐겨찾기"><span class="placeholder"></span></button>
+  <button class="icon-btn" aria-label="설정"><span class="placeholder"></span></button>
+  <button class="icon-btn" aria-label="전체화면"><span class="placeholder"></span></button>
+</div>
+
+<p class="sub" style="margin-top:24px;">
+  점선 박스로 표시된 자리에는 즐겨찾기/설정/전체화면 아이콘이 들어갑니다.
+  동일한 디자인 토큰(24x24, stroke 2, round caps)으로 만들면 시각적 일관성이 유지됩니다.
+</p>
+
+</body>
+</html>

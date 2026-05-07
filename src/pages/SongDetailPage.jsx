@@ -10,19 +10,9 @@ import LyricsView from "../components/LyricsView";
 import SheetView from "../components/SheetView";
 import MemoEditor from "../components/MemoEditor";
 import OsmdView from "../components/OsmdView";
+import HomeIcon from "../components/icons/HomeIcon";
 
 /* ── 아이콘 SVG ── */
-const HomeLogoIcon = () => (
-  <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
-    stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    {/* 십자가 (위) */}
-    <line x1="12" y1="2" x2="12" y2="11" />
-    <line x1="9.5" y1="5" x2="14.5" y2="5" />
-    {/* 펼쳐진 책/악보 (아래) — 가운데 접힘 + 양쪽 페이지 */}
-    <path d="M3 13 L12 11 L21 13 L21 21 L12 19 L3 21 Z" />
-    <line x1="12" y1="11" x2="12" y2="19" />
-  </svg>
-);
 const SettingsIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
     stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -243,7 +233,7 @@ export default function SongDetailPage() {
           <div className="max-w-3xl mx-auto flex items-center gap-2">
             <button onClick={() => navigate("/")}
               className="shrink-0 text-t-hint hover:text-t-primary transition-colors px-1" title="곡 목록으로">
-              <HomeLogoIcon />
+              <HomeIcon size={22} title="곡 목록으로" />
             </button>
             <h1 className="text-base font-bold text-t-primary truncate flex-1 min-w-0">
               {song.title}
