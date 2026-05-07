@@ -112,10 +112,11 @@ export default function OsmdView({
         totalStepsRef.current = times.length;
         cursorTimesRef.current = times;
 
-        // BPM 수집: OSMD → MIDI(prop) → 기본값 120
+        // BPM 수집: MIDI(prop) → OSMD → 기본값 120
+        // OSMD의 TempoInBPM은 대부분 0을 반환하므로 MIDI BPM을 최우선 사용
         const srcMeasures = osmd.sheet?.SourceMeasures;
         const osmdBpm = srcMeasures?.[0]?.TempoInBPM || 0;
-        const detectedBpm = osmdBpm > 0 ? osmdBpm : (midiBpm > 0 ? midiBpm : 120);
+        const detectedBpm = midiBpm > 0 ? midiBpm : (osmdBpm > 0 ? osmdBpm : 120);
         bpmRef.current = detectedBpm;
 
         osmd.cursor.reset();
@@ -126,7 +127,7 @@ export default function OsmdView({
         await new Promise((r) => requestAnimationFrame(r));
         forceCursorVisible();
 
-        const bpmSource = osmdBpm > 0 ? "OSMD" : (midiBpm > 0 ? "MIDI" : "기본값");
+        const bpmSource = midiBpm > 0 ? "MIDI" : (osmdBpm > 0 ? "OSMD" : "기본값");
         const lastBeat = times.length > 0 ? times[times.length - 1] : 0;
         const estDuration = detectedBpm > 0 ? (lastBeat * 4 * 60 / detectedBpm) : "N/A";
         console.log(
@@ -150,8 +151,7 @@ export default function OsmdView({
 
   // ── midiBpm이 나중에 들어왔을 때 bpmRef 업데이트 (OSMD 재로드 없이) ──
   useEffect(() => {
-    if (midiBpm > 0 && bpmRef.current === 120) {
-      // OSMD에서 BPM을 못 가져와서 기본값 120이었는데, MIDI에서 BPM이 들어온 경우
+    if (midiBpm > 0 && bpmRef.current !== midiBpm) {
       bpmRef.current = midiBpm;
     }
   }, [midiBpm]);
