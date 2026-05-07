@@ -7,7 +7,7 @@
  * │                                                                 │
  * │ 1. OSMD 로드 시 각 커서 스텝의 beat 값 수집 (cursorTimesRef)     │
  * │ 2. OSMD에서 BPM 추출 (bpmRef)                                   │
- * │ 3. MIDI 재생 시간(초) → beat 변환: beat = sec × (BPM / 60)      │
+ * │ 3. MIDI 재생 시간(초) → beat 변환: beat = sec × (BPM / 60) / 4 │
  * │ 4. cursorTimesRef에서 현재 beat 이하의 마지막 인덱스 = 커서 위치  │
  * │                                                                 │
  * │ 이 방식은 음표 길이를 정확히 반영하므로 2분음표는 오래 머물고,    │
@@ -139,7 +139,7 @@ export default function OsmdView({
 
         // 디버그: beat 기반 매핑 검증용
         const lastBeat = times.length > 0 ? times[times.length - 1] : 0;
-        const estDuration = detectedBpm > 0 ? (lastBeat * 60 / detectedBpm) : "N/A";
+        const estDuration = detectedBpm > 0 ? (lastBeat * 4 * 60 / detectedBpm) : "N/A";
         const bpmSource = osmdBpm > 0 ? "OSMD" : (midiBpm > 0 ? "MIDI" : "기본값");
         console.log(
           `OSMD 준비: ${times.length}스텝, BPM=${detectedBpm}(${bpmSource}), ` +
@@ -201,8 +201,10 @@ export default function OsmdView({
 
       // ── beat 기반 매핑 (BPM + cursorTimes 둘 다 유효할 때) ──
       if (bpm > 0 && cTimes.length > 0) {
-        // 재생 시간(초) → beat 변환: beat = seconds × (BPM / 60)
-        const currentBeat = origSec * (bpm / 60);
+        // 재생 시간(초) → beat 변환
+        // OSMD realValue는 온음표=1.0 단위 (4분음표=0.25)
+        // beat = seconds × (BPM / 60) / 4
+        const currentBeat = origSec * (bpm / 60) / 4;
 
         // cursorTimes에서 currentBeat 이하인 마지막 인덱스 찾기
         let step = 0;
