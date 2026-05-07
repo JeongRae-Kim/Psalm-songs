@@ -205,8 +205,10 @@ export default function OsmdView({
         // 재생 시간(초) → beat 변환
         // OSMD realValue는 온음표=1.0 단위 (4분음표=0.25)
         // midiOffset: MIDI 첫 음표 전 무음 구간(초) 차감
-        // beat = (seconds - offset) × (BPM / 60) / 4
-        const adjustedSec = Math.max(0, origSec - midiOffset);
+        // AUDIO_LATENCY: 오디오 버퍼링에 의한 소리 지연 보정
+        // beat = (seconds - offset - latency) × (BPM / 60) / 4
+        const AUDIO_LATENCY = 0.3;
+        const adjustedSec = Math.max(0, origSec - midiOffset - AUDIO_LATENCY);
         const currentBeat = adjustedSec * (bpm / 60) / 4;
 
         // cursorTimes에서 currentBeat 이하인 마지막 인덱스 찾기
