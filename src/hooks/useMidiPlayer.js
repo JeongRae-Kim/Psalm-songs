@@ -74,6 +74,23 @@ export default function useMidiPlayer(midiUrl, totalLoops = 1) {
           melodyTimesRef.current = midi.tracks[0].notes.map((n) => n.time).sort((a, b) => a - b);
         }
 
+        // 디버그: MIDI 타이밍 분석
+        const mTimes = melodyTimesRef.current;
+        const firstNote = mTimes.length > 0 ? mTimes[0] : 0;
+        const lastNoteStart = mTimes.length > 0 ? mTimes[mTimes.length - 1] : 0;
+        // 마지막 멜로디 음표의 끝 시점 (start + duration)
+        const melodyNotes = midi.tracks.length > 0 ? midi.tracks[0].notes : [];
+        const lastMelodyNote = melodyNotes.length > 0 ? melodyNotes[melodyNotes.length - 1] : null;
+        const lastNoteEnd = lastMelodyNote ? (lastMelodyNote.time + lastMelodyNote.duration) : 0;
+        console.log(
+          `[MIDI] duration=${midi.duration.toFixed(2)}s, BPM=${originalBpm.current}, ` +
+          `notes=${all.length}, melodyNotes=${mTimes.length}, ` +
+          `firstNote=${firstNote.toFixed(3)}s, lastNoteStart=${lastNoteStart.toFixed(3)}s, ` +
+          `lastNoteEnd=${lastNoteEnd.toFixed(3)}s, ` +
+          `연주구간=${(lastNoteStart - firstNote).toFixed(3)}s, ` +
+          `끝여백=${(midi.duration - lastNoteEnd).toFixed(3)}s`
+        );
+
         setLoading(false); setReady(true);
       })
       .catch((e) => { if (!cancelled) { setError(e.message); setLoading(false); } });
