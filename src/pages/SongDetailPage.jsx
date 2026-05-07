@@ -97,10 +97,26 @@ export default function SongDetailPage() {
 
   const midi = useMidiPlayer(hasMidi ? song.midiFile : null);
 
+  // 곡 변경 시: 현재 탭이 새 곡에서 유효한지 검사 (패턴 C — 조건부 유지)
   useEffect(() => {
-    setActiveTab("sheet");
+    const currentSong = songs.find((s) => s.id === id);
+    if (!currentSong) return;
+
+    const songHasMxl = Boolean(currentSong.mxlFile);
+    const songHasLyrics = currentSong.verses && currentSong.verses.length > 0;
+
+    const tabValid =
+      activeTab === "sheet" ||                          // 악보는 모든 곡 보유
+      (activeTab === "practice" && songHasMxl) ||       // 연습은 mxl 필요
+      (activeTab === "lyrics" && songHasLyrics);        // 가사는 verses 필요
+
+    if (!tabValid) {
+      setActiveTab("sheet");  // 유효하지 않으면 악보로 폴백
+    }
+
     if (midi.ready) midi.stop();
-  }, [id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, songs]);
 
   useEffect(() => {
     if (activeTab !== "practice" && midi.playing) midi.stop();
@@ -225,13 +241,27 @@ export default function SongDetailPage() {
         left: 0, right: 0, overflowY: "auto", overflowX: "hidden",
         WebkitOverflowScrolling: "touch", overscrollBehavior: "contain",
       }}>
-        <div className="max-w-3xl mx-auto">
+        <div className="max-w-3xl mx-auto" style={{ position: "relative" }}>
           {activeTab === "sheet" && <SheetView sheetImage={song.sheetImage} title={song.title} />}
-          {activeTab === "practice" && hasPractice && (
-            <OsmdView mxlUrl={song.mxlFile} originalTime={midi.originalTime}
-              melodyTimes={midi.melodyTimes} playing={midi.playing} scrollContainerRef={mainRef} />
-          )}
           {activeTab === "lyrics" && <LyricsView verses={song.verses} />}
+
+          {/* 연습탭은 항상 마운트 (백그라운드 렌더링) — 활성 시에만 보이고 상호작용 가능 */}
+          {hasPractice && (
+            <div
+              style={{
+                visibility: activeTab === "practice" ? "visible" : "hidden",
+                position: activeTab === "practice" ? "static" : "absolute",
+                top: 0,
+                left: 0,
+                right: 0,
+                pointerEvents: activeTab === "practice" ? "auto" : "none",
+                zIndex: activeTab === "practice" ? 1 : -1,
+              }}
+            >
+              <OsmdView mxlUrl={song.mxlFile} originalTime={midi.originalTime}
+                melodyTimes={midi.melodyTimes} playing={midi.playing} scrollContainerRef={mainRef} />
+            </div>
+          )}
         </div>
       </main>
 

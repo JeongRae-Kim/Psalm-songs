@@ -96,6 +96,8 @@ export default function OsmdView({
           drawPartNames: false,
           drawMeasureNumbers: false,
           followCursor: true,
+          pageFormat: "Endless",         // 페이지 분할 X, 무한 세로 스크롤
+          drawingParameters: "compact",  // 모바일 친화 압축 레이아웃
         });
 
         try {
@@ -104,6 +106,15 @@ export default function OsmdView({
           console.warn("ArrayBuffer 실패, URL 시도:", e1.message);
           await osmd.load(mxlUrl);
         }
+
+        // 변경 4: 컨테이너 폭 기반 zoom 동적 계산 (모바일 폭 맞춤)
+        // 기준 폭 1000px → 컨테이너가 좁으면 zoom을 줄임. 하한 0.4로 가독성 보장.
+        const containerWidth = containerRef.current.offsetWidth || 380;
+        const baseWidth = 1000;
+        const padding = 16; // 좌우 padding 8px씩
+        const idealZoom = Math.max(0.4, Math.min(1.0, (containerWidth - padding) / baseWidth));
+        osmd.zoom = idealZoom;
+        console.log(`OSMD zoom: ${idealZoom.toFixed(2)} (container ${containerWidth}px)`);
 
         osmd.render();
         osmdRef.current = osmd;
@@ -125,9 +136,11 @@ export default function OsmdView({
         osmd.cursor.show();
         cursorIdxRef.current = 0;
 
+        // 변경 5: 페이드인 타이밍 보강
+        // 커서를 먼저 강제 표시한 뒤 한 프레임 대기 → DOM 안정화 후 페이드인 시작
         forceCursorVisible();
-        setTimeout(forceCursorVisible, 100);
-        setTimeout(forceCursorVisible, 500);
+        await new Promise((r) => requestAnimationFrame(r));
+        forceCursorVisible();
 
         console.log("OSMD 준비:", times.length, "커서 스텝");
         if (!cancelled) setLoading(false);
