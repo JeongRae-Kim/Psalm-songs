@@ -1,10 +1,10 @@
 /**
- * useMidiPlayer.js v4
- * MIDI 파일 로드/파싱 + SoundFont 피아노 재생 (smplr)
- * 단순 재생 구조 — MIDI를 처음부터 끝까지 한 번 재생
+ * useMidiPlayer.js v5
+ * MIDI 파일 로드/파싱 + SoundFont 피아노 재생 (smplr) + 반복 재생
  *
- * 반복/아멘 처리는 악보 입력 시 MuseScore에서 반복기호를 사용하여
- * MIDI 내보내기 시 자동으로 풀리도록 함 (앱 코드 수정 불필요)
+ * 반복 재생: mid가 본곡 1회분이고, totalLoops만큼 자동 반복
+ * - 매 반복 시작 시 currentLoop 카운트 증가 (외부 컴포넌트가 cursor 리셋용)
+ * - 마지막 반복 끝나면 자동 정지
  *
  * 필요 패키지: npm install @tonejs/midi smplr
  */
@@ -12,7 +12,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { Midi } from "@tonejs/midi";
 import { SplendidGrandPiano } from "smplr";
 
-export default function useMidiPlayer(midiUrl) {
+export default function useMidiPlayer(midiUrl, totalLoops = 1) {
   const [loading, setLoading] = useState(false);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState(null);
@@ -21,6 +21,7 @@ export default function useMidiPlayer(midiUrl) {
   const [duration, setDuration] = useState(0);
   const [tempo, setTempo] = useState(120);
   const [pianoLoading, setPianoLoading] = useState(false);
+  const [currentLoop, setCurrentLoop] = useState(0);  // 현재 몇 번째 반복인지 (0부터)
 
   const pianoRef = useRef(null);
   const audioCtxRef = useRef(null);
@@ -33,6 +34,13 @@ export default function useMidiPlayer(midiUrl) {
   const pausedAtRef = useRef(0);
   const scheduledRef = useRef([]);
   const playingRef = useRef(false);
+  const currentLoopRef = useRef(0);  // setTimeout 내부에서 최신값 참조용
+  const totalLoopsRef = useRef(totalLoops);  // 동일 이유
+
+  // totalLoops가 외부에서 바뀔 때 ref 동기화
+  useEffect(() => {
+    totalLoopsRef.current = totalLoops;
+  }, [totalLoops]);
 
   const tempoRatio = useCallback(() => originalBpm.current / tempo, [tempo]);
 
@@ -109,11 +117,39 @@ export default function useMidiPlayer(midiUrl) {
       }
     });
 
-    // 곡 끝나면 자동 정지
+    // 곡 끝 도달 시 처리: 다음 loop가 있으면 재생 계속, 없으면 정지
     const endDelay = (originalDuration.current - fromTime) * r * 1000;
-    const endId = setTimeout(() => { if (playingRef.current) stop(); }, endDelay + 100);
+    const endId = setTimeout(() => {
+      if (!playingRef.current) return;
+
+      const nextLoop = currentLoopRef.current + 1;
+      if (nextLoop < totalLoopsRef.current) {
+        // 다음 반복으로: cursor 리셋 신호 + 처음부터 재생 계속
+        currentLoopRef.current = nextLoop;
+        setCurrentLoop(nextLoop);
+        pausedAtRef.current = 0;
+        setCurrentTime(0);
+        const ctx = audioCtxRef.current;
+        if (ctx) startedAtRef.current = ctx.currentTime;
+        scheduleNotesRef.current(0);  // 다음 loop 스케줄
+      } else {
+        // 마지막 반복 종료 → 정지
+        currentLoopRef.current = 0;
+        setCurrentLoop(0);
+        stopRef.current?.();
+      }
+    }, endDelay + 100);
     scheduledRef.current.push(endId);
   }, [tempoRatio]);
+
+  // scheduleNotes를 ref에 저장 (자기 자신을 setTimeout 안에서 호출하기 위함)
+  const scheduleNotesRef = useRef(null);
+  useEffect(() => {
+    scheduleNotesRef.current = scheduleNotes;
+  }, [scheduleNotes]);
+
+  // stop도 ref로 저장 (scheduleNotes 안에서 호출하기 위함, 호이스팅 회피)
+  const stopRef = useRef(null);
 
   // ── tick ──
   const tick = useCallback(() => {
@@ -131,6 +167,14 @@ export default function useMidiPlayer(midiUrl) {
     await ensurePiano();
     const ctx = audioCtxRef.current;
     if (ctx.state === "suspended") await ctx.resume();
+
+    // 마지막 loop 끝난 후 재생 시 처음부터
+    if (currentLoopRef.current >= totalLoopsRef.current) {
+      currentLoopRef.current = 0;
+      setCurrentLoop(0);
+      pausedAtRef.current = 0;
+      setCurrentTime(0);
+    }
 
     scheduleNotes(pausedAtRef.current);
     playingRef.current = true;
@@ -160,8 +204,15 @@ export default function useMidiPlayer(midiUrl) {
     playingRef.current = false;
     setPlaying(false);
     setCurrentTime(0);
+    currentLoopRef.current = 0;
+    setCurrentLoop(0);
     cancelAnimationFrame(rafRef.current);
   }, []);
+
+  // stop을 ref에 동기화
+  useEffect(() => {
+    stopRef.current = stop;
+  }, [stop]);
 
   // ── 탐색 ──
   const seekTo = useCallback((fraction) => {
@@ -217,6 +268,8 @@ export default function useMidiPlayer(midiUrl) {
     progress,                       // 0~1
     tempo,
     melodyTimes: melodyTimesRef.current,
+    currentLoop,                    // 현재 몇 번째 반복 (0부터)
+    totalLoops,                     // 총 반복 횟수
     play, pause, stop, seekTo, changeTempo,
   };
 }

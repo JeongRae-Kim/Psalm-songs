@@ -41,6 +41,7 @@ export default function OsmdView({
   melodyTimes,
   playing,
   scrollContainerRef,
+  currentLoop = 0,
 }) {
   const containerRef = useRef(null);
   const osmdRef = useRef(null);
@@ -238,6 +239,20 @@ export default function OsmdView({
     forceCursorVisible();
     if (moved) scrollToCursor();
   }, [originalTime, playing, getCursorTarget, scrollToCursor, forceCursorVisible]);
+
+  // ── 반복 재생 시 cursor 처음으로 리셋 ──
+  useEffect(() => {
+    if (currentLoop > 0 && osmdRef.current) {
+      try {
+        osmdRef.current.cursor.reset();
+        osmdRef.current.cursor.show();
+        cursorIdxRef.current = 0;
+        forceCursorVisible();
+        // 부드러운 시각 효과: 악보 처음으로 스크롤
+        scrollToCursor();
+      } catch (e) { /* 무시 */ }
+    }
+  }, [currentLoop, forceCursorVisible, scrollToCursor]);
 
   // ── 정지 시 리셋 ──
   useEffect(() => {

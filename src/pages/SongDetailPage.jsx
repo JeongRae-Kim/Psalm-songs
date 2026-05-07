@@ -11,11 +11,11 @@ import MemoEditor from "../components/MemoEditor";
 import OsmdView from "../components/OsmdView";
 
 /* ── 아이콘 SVG ── */
-const HomeIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+const SettingsIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
     stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-    <polyline points="9 22 9 12 15 12 15 22" />
+    <circle cx="12" cy="12" r="3" />
+    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
   </svg>
 );
 const ExpandIcon = () => (
@@ -95,7 +95,10 @@ export default function SongDetailPage() {
   const hasMxl = Boolean(song?.mxlFile);
   const hasPractice = hasMxl;
 
-  const midi = useMidiPlayer(hasMidi ? song.midiFile : null);
+  // 반복 횟수: 가사 절수만큼 자동 반복 (전주는 mid에 포함되어 있으면 매 반복마다 들림)
+  const totalLoops = song?.verses?.length || 1;
+
+  const midi = useMidiPlayer(hasMidi ? song.midiFile : null, totalLoops);
 
   // 곡 변경 시: 현재 탭이 새 곡에서 유효한지 검사 (패턴 C — 조건부 유지)
   useEffect(() => {
@@ -197,12 +200,17 @@ export default function SongDetailPage() {
         <div className="bg-card border-b border-b-light px-3 py-2.5">
           <div className="max-w-3xl mx-auto flex items-center gap-2">
             <button onClick={() => navigate("/")}
-              className="shrink-0 text-t-hint hover:text-t-primary transition-colors" title="홈으로">
-              <HomeIcon />
+              className="shrink-0 text-sm font-medium text-t-hint hover:text-t-primary transition-colors px-1" title="곡 목록으로">
+              목록
             </button>
             <h1 className="text-base font-bold text-t-primary truncate flex-1 min-w-0">
               {song.title}
             </h1>
+            <button onClick={() => navigate("/settings")}
+              className="shrink-0 text-t-hint hover:text-t-primary transition-colors"
+              title="설정">
+              <SettingsIcon />
+            </button>
             <button onClick={() => toggleFavorite(song.id)}
               className="shrink-0 text-lg hover:scale-110 transition-transform">
               {isFavorite(song.id)
@@ -259,7 +267,8 @@ export default function SongDetailPage() {
               }}
             >
               <OsmdView mxlUrl={song.mxlFile} originalTime={midi.originalTime}
-                melodyTimes={midi.melodyTimes} playing={midi.playing} scrollContainerRef={mainRef} />
+                melodyTimes={midi.melodyTimes} playing={midi.playing} scrollContainerRef={mainRef}
+                currentLoop={midi.currentLoop} />
             </div>
           )}
         </div>
@@ -316,6 +325,13 @@ export default function SongDetailPage() {
                     {formatTime(midi.duration)}
                   </span>
 
+                  {/* 절 카운트 (verses.length > 1인 경우만 표시) */}
+                  {midi.totalLoops > 1 && (
+                    <span className="shrink-0 text-[10px] text-white/60 ml-1" title={`${midi.currentLoop + 1}/${midi.totalLoops}절`}>
+                      {midi.currentLoop + 1}/{midi.totalLoops}
+                    </span>
+                  )}
+
                   {/* 템포 */}
                   <input type="range" min={60} max={200} step={1}
                     value={midi.tempo}
@@ -333,12 +349,12 @@ export default function SongDetailPage() {
               {/* ▶ 다음 곡 */}
               <button onClick={() => nextSong && navigate(`/song/${nextSong.id}`)}
                 disabled={!nextSong}
-                className={`shrink-0 p-1.5 rounded-full transition-colors ${nextSong ? "text-white/80 hover:text-white active:bg-white/10" : "text-white/20 cursor-not-allowed"}`}
+                className={`shrink-0 ml-2 p-1.5 rounded-full transition-colors ${nextSong ? "text-white/80 hover:text-white active:bg-white/10" : "text-white/20 cursor-not-allowed"}`}
                 title="다음 곡"><NextIcon /></button>
 
               {/* 다운로드 */}
               <a href={song.sheetPdf} download
-                className="shrink-0 ml-1 p-1.5 rounded-full text-white/60 hover:text-white active:bg-white/10 transition-colors"
+                className="shrink-0 ml-2 p-1.5 rounded-full text-white/60 hover:text-white active:bg-white/10 transition-colors"
                 title="PDF 다운로드"><DownloadIcon /></a>
             </div>
           </div>
