@@ -60,8 +60,9 @@ export default function OsmdView({
   const [error, setError] = useState(null);
 
   // ── 커서 DOM 강제 표시 (height 1px 버그 수정) ──
+  // 자기 컨테이너 내부의 cursor만 찾음 (다중 OsmdView 인스턴스 간 ID 충돌 방지)
   const forceCursorVisible = useCallback(() => {
-    const cursorImg = document.getElementById("cursorImg-0");
+    const cursorImg = containerRef.current?.querySelector('img[id^="cursorImg-"]');
     if (!cursorImg) return;
     const attrH = cursorImg.getAttribute("height");
     const h = attrH ? attrH + "px" : "171px";
@@ -168,7 +169,8 @@ export default function OsmdView({
 
   // ── 스크롤 ──
   const scrollToCursor = useCallback(() => {
-    const cursorEl = document.getElementById("cursorImg-0");
+    // 자기 컨테이너 내부의 cursor만 찾음 (다중 OsmdView 인스턴스 간 ID 충돌 방지)
+    const cursorEl = containerRef.current?.querySelector('img[id^="cursorImg-"]');
     const scrollEl = scrollContainerRef?.current;
     if (!cursorEl || !scrollEl) return;
 
