@@ -302,7 +302,7 @@ export default function SongDetailPage() {
                 melodyTimes={midi.melodyTimes} playing={midi.playing} scrollContainerRef={mainRef}
                 currentLoop={midi.currentLoop} midiBpm={midi.tempo}
                 midiOffset={midi.melodyTimes?.[0] || 0}
-                midiDuration={midi.originalDuration || 0} />
+                midiDuration={midi.melodyTimes?.length > 0 ? midi.melodyTimes[midi.melodyTimes.length - 1] : midi.originalDuration || 0} />
             </div>
           )}
 
@@ -323,7 +323,7 @@ export default function SongDetailPage() {
                 melodyTimes={metronome.melodyTimes} playing={metronome.playing} scrollContainerRef={mainRef}
                 currentLoop={metronome.currentLoop} midiBpm={metronome.tempo}
                 midiOffset={metronome.melodyTimes?.[0] || 0}
-                midiDuration={metronome.originalDuration || 0} />
+                midiDuration={metronome.melodyTimes?.length > 0 ? metronome.melodyTimes[metronome.melodyTimes.length - 1] : metronome.originalDuration || 0} />
             </div>
           )}
         </div>
