@@ -145,6 +145,7 @@ export default function OsmdView({
           `OSMD 준비: ${times.length}스텝, BPM=${detectedBpm}(${bpmSource}), ` +
           `lastBeat=${lastBeat.toFixed(2)}, 추정길이=${typeof estDuration === "number" ? estDuration.toFixed(1) + "초" : estDuration}`
         );
+        console.log("cursorTimes:", JSON.stringify(times.map(t => Math.round(t * 1000) / 1000)));
         if (!cancelled) setLoading(false);
       })
       .catch((err) => {
