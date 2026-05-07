@@ -439,15 +439,9 @@ export default function SongDetailPage() {
                     {formatTime(metronome.duration)}
                   </span>
 
-                  {/* 박자 카운트 (예: 1/3) */}
-                  <span className="shrink-0 text-[10px] text-white/60 ml-1"
-                    title={`${metronome.currentBeat}/${metronome.beatsPerMeasure}박자`}>
-                    {metronome.currentBeat}/{metronome.beatsPerMeasure}
-                  </span>
-
                   {/* 절 카운트 (verses.length > 1인 경우만 표시) */}
                   {metronome.totalLoops > 1 && (
-                    <span className="shrink-0 text-[10px] text-white/60" title={`${metronome.currentLoop + 1}/${metronome.totalLoops}절`}>
+                    <span className="shrink-0 text-[10px] text-white/60 ml-1" title={`${metronome.currentLoop + 1}/${metronome.totalLoops}절`}>
                       {metronome.currentLoop + 1}/{metronome.totalLoops}
                     </span>
                   )}
