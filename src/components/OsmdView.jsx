@@ -146,6 +146,8 @@ export default function OsmdView({
           `lastBeat=${lastBeat.toFixed(2)}, 추정길이=${typeof estDuration === "number" ? estDuration.toFixed(1) + "초" : estDuration}`
         );
         console.log("cursorTimes:", JSON.stringify(times.map(t => Math.round(t * 1000) / 1000)));
+        console.log("melodyTimes (첫10개):", JSON.stringify((melodyTimes || []).slice(0, 10).map(t => Math.round(t * 1000) / 1000)));
+        console.log("melodyTimes 총 개수:", (melodyTimes || []).length);
         if (!cancelled) setLoading(false);
       })
       .catch((err) => {
@@ -236,11 +238,26 @@ export default function OsmdView({
     [melodyTimes]
   );
 
+  // ── 디버그: 마지막 로그 시간 (1초 간격으로 제한) ──
+  const lastDebugRef = useRef(0);
+
   useEffect(() => {
     const osmd = osmdRef.current;
     if (!osmd || !playing || totalStepsRef.current === 0) return;
 
     const target = getCursorTarget(originalTime);
+
+    // 디버그: 1초 간격으로 현재 상태 출력
+    const now = Date.now();
+    if (now - lastDebugRef.current > 1000) {
+      const bpm = bpmRef.current;
+      const currentBeat = bpm > 0 ? originalTime * (bpm / 60) : "N/A";
+      console.log(
+        `[커서] origSec=${originalTime.toFixed(2)}, beat=${typeof currentBeat === "number" ? currentBeat.toFixed(2) : currentBeat}, ` +
+        `target=${target}/${totalStepsRef.current}, cursorBeat=${cursorTimesRef.current[target]?.toFixed(2) || "?"}`
+      );
+      lastDebugRef.current = now;
+    }
 
     if (target < cursorIdxRef.current) {
       osmd.cursor.reset();
