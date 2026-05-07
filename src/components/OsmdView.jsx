@@ -26,6 +26,7 @@ export default function OsmdView({
   playing,
   scrollContainerRef,
   currentLoop = 0,
+  midiBpm = 0,
 }) {
   const containerRef = useRef(null);
   const osmdRef = useRef(null);
@@ -119,8 +120,10 @@ export default function OsmdView({
         cursorTimesRef.current = times;
 
         // BPM 수집 (beat → 초 변환에 필요)
+        // 우선순위: OSMD 악보 → MIDI 헤더(prop) → 기본값 120
         const srcMeasures = osmd.sheet?.SourceMeasures;
-        const detectedBpm = srcMeasures?.[0]?.TempoInBPM || 0;
+        const osmdBpm = srcMeasures?.[0]?.TempoInBPM || 0;
+        const detectedBpm = osmdBpm > 0 ? osmdBpm : (midiBpm > 0 ? midiBpm : 120);
         bpmRef.current = detectedBpm;
 
         // 리셋
@@ -137,8 +140,9 @@ export default function OsmdView({
         // 디버그: beat 기반 매핑 검증용
         const lastBeat = times.length > 0 ? times[times.length - 1] : 0;
         const estDuration = detectedBpm > 0 ? (lastBeat * 60 / detectedBpm) : "N/A";
+        const bpmSource = osmdBpm > 0 ? "OSMD" : (midiBpm > 0 ? "MIDI" : "기본값");
         console.log(
-          `OSMD 준비: ${times.length}스텝, BPM=${detectedBpm}, ` +
+          `OSMD 준비: ${times.length}스텝, BPM=${detectedBpm}(${bpmSource}), ` +
           `lastBeat=${lastBeat.toFixed(2)}, 추정길이=${typeof estDuration === "number" ? estDuration.toFixed(1) + "초" : estDuration}`
         );
         if (!cancelled) setLoading(false);
