@@ -263,6 +263,7 @@ export default function useMidiPlayer(midiUrl, totalLoops = 1) {
     ready, error, playing,
     currentTime,                    // 원본 시간 (초) — 커서 동기화용
     originalTime: currentTime,      // 별칭
+    originalDuration: originalDuration.current, // MIDI 원본 길이 (초) — 커서 스케일 보정용
     duration: adjustedDuration,     // 템포 적용 후 총 길이 (프로그레스 바)
     displayTime: adjustedCurrentTime, // 템포 적용 후 현재 시간 (표시용)
     progress,                       // 0~1

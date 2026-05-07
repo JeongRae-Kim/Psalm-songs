@@ -28,6 +28,7 @@ export default function OsmdView({
   currentLoop = 0,
   midiBpm = 0,
   midiOffset = 0,
+  midiDuration = 0,
 }) {
   const containerRef = useRef(null);
   const osmdRef = useRef(null);
@@ -205,11 +206,14 @@ export default function OsmdView({
         // 재생 시간(초) → beat 변환
         // OSMD realValue는 온음표=1.0 단위 (4분음표=0.25)
         // midiOffset: MIDI 첫 음표 전 무음 구간(초) 차감
-        // AUDIO_LATENCY: 오디오 버퍼링에 의한 소리 지연 보정
-        // beat = (seconds - offset - latency) × (BPM / 60) / 4
-        const AUDIO_LATENCY = 0.3;
-        const adjustedSec = Math.max(0, origSec - midiOffset - AUDIO_LATENCY);
-        const currentBeat = adjustedSec * (bpm / 60) / 4;
+        // 스케일 보정: MIDI 실제 길이와 OSMD 추정 길이의 비율로 자동 보정
+        const lastBeat = cTimes[cTimes.length - 1] || 1;
+        const osmdEstDuration = lastBeat * 4 * 60 / bpm;  // OSMD 기반 추정 길이(초)
+        const effectiveDuration = midiDuration > 0 ? (midiDuration - midiOffset) : osmdEstDuration;
+        const scale = effectiveDuration / osmdEstDuration;  // 보정 비율
+
+        const adjustedSec = Math.max(0, origSec - midiOffset);
+        const currentBeat = (adjustedSec / scale) * (bpm / 60) / 4;
 
         // cursorTimes에서 currentBeat 이하인 마지막 인덱스 찾기
         let step = 0;
@@ -258,12 +262,15 @@ export default function OsmdView({
     const now = Date.now();
     if (now - lastDebugRef.current > 1000) {
       const bpm = bpmRef.current;
+      const cTimes = cursorTimesRef.current;
+      const lastBeat = cTimes.length > 0 ? cTimes[cTimes.length - 1] : 1;
+      const osmdEst = bpm > 0 ? lastBeat * 4 * 60 / bpm : 0;
+      const effDur = midiDuration > 0 ? (midiDuration - midiOffset) : osmdEst;
+      const scale = osmdEst > 0 ? (effDur / osmdEst).toFixed(3) : "N/A";
       const adjSec = Math.max(0, originalTime - midiOffset);
-      const currentBeat = bpm > 0 ? adjSec * (bpm / 60) / 4 : "N/A";
       console.log(
-        `[커서] origSec=${originalTime.toFixed(2)}, offset=${midiOffset.toFixed(2)}, adjSec=${adjSec.toFixed(2)}, ` +
-        `beat=${typeof currentBeat === "number" ? currentBeat.toFixed(2) : currentBeat}, ` +
-        `target=${target}/${totalStepsRef.current}, cursorBeat=${cursorTimesRef.current[target]?.toFixed(2) || "?"}`
+        `[커서] origSec=${originalTime.toFixed(2)}, adjSec=${adjSec.toFixed(2)}, scale=${scale}, ` +
+        `target=${target}/${totalStepsRef.current}, cursorBeat=${cTimes[target]?.toFixed(2) || "?"}`
       );
       lastDebugRef.current = now;
     }

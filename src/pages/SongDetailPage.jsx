@@ -301,7 +301,8 @@ export default function SongDetailPage() {
               <OsmdView mxlUrl={song.mxlFile} originalTime={midi.originalTime}
                 melodyTimes={midi.melodyTimes} playing={midi.playing} scrollContainerRef={mainRef}
                 currentLoop={midi.currentLoop} midiBpm={midi.tempo}
-                midiOffset={midi.melodyTimes?.[0] || 0} />
+                midiOffset={midi.melodyTimes?.[0] || 0}
+                midiDuration={midi.originalDuration || 0} />
             </div>
           )}
 
@@ -321,7 +322,8 @@ export default function SongDetailPage() {
               <OsmdView mxlUrl={song.mxlFile} originalTime={metronome.originalTime}
                 melodyTimes={metronome.melodyTimes} playing={metronome.playing} scrollContainerRef={mainRef}
                 currentLoop={metronome.currentLoop} midiBpm={metronome.tempo}
-                midiOffset={metronome.melodyTimes?.[0] || 0} />
+                midiOffset={metronome.melodyTimes?.[0] || 0}
+                midiDuration={metronome.originalDuration || 0} />
             </div>
           )}
         </div>
