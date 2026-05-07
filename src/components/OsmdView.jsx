@@ -27,6 +27,7 @@ export default function OsmdView({
   scrollContainerRef,
   currentLoop = 0,
   midiBpm = 0,
+  midiOffset = 0,
 }) {
   const containerRef = useRef(null);
   const osmdRef = useRef(null);
@@ -203,8 +204,10 @@ export default function OsmdView({
       if (bpm > 0 && cTimes.length > 0) {
         // 재생 시간(초) → beat 변환
         // OSMD realValue는 온음표=1.0 단위 (4분음표=0.25)
-        // beat = seconds × (BPM / 60) / 4
-        const currentBeat = origSec * (bpm / 60) / 4;
+        // midiOffset: MIDI 첫 음표 전 무음 구간(초) 차감
+        // beat = (seconds - offset) × (BPM / 60) / 4
+        const adjustedSec = Math.max(0, origSec - midiOffset);
+        const currentBeat = adjustedSec * (bpm / 60) / 4;
 
         // cursorTimes에서 currentBeat 이하인 마지막 인덱스 찾기
         let step = 0;
@@ -253,9 +256,11 @@ export default function OsmdView({
     const now = Date.now();
     if (now - lastDebugRef.current > 1000) {
       const bpm = bpmRef.current;
-      const currentBeat = bpm > 0 ? originalTime * (bpm / 60) : "N/A";
+      const adjSec = Math.max(0, originalTime - midiOffset);
+      const currentBeat = bpm > 0 ? adjSec * (bpm / 60) / 4 : "N/A";
       console.log(
-        `[커서] origSec=${originalTime.toFixed(2)}, beat=${typeof currentBeat === "number" ? currentBeat.toFixed(2) : currentBeat}, ` +
+        `[커서] origSec=${originalTime.toFixed(2)}, offset=${midiOffset.toFixed(2)}, adjSec=${adjSec.toFixed(2)}, ` +
+        `beat=${typeof currentBeat === "number" ? currentBeat.toFixed(2) : currentBeat}, ` +
         `target=${target}/${totalStepsRef.current}, cursorBeat=${cursorTimesRef.current[target]?.toFixed(2) || "?"}`
       );
       lastDebugRef.current = now;
