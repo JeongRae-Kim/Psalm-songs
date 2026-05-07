@@ -146,7 +146,15 @@ export default function OsmdView({
       cancelled = true;
       osmdRef.current = null;
     };
-  }, [mxlUrl, forceCursorVisible, midiBpm]);
+  }, [mxlUrl, forceCursorVisible]);
+
+  // ── midiBpm이 나중에 들어왔을 때 bpmRef 업데이트 (OSMD 재로드 없이) ──
+  useEffect(() => {
+    if (midiBpm > 0 && bpmRef.current === 120) {
+      // OSMD에서 BPM을 못 가져와서 기본값 120이었는데, MIDI에서 BPM이 들어온 경우
+      bpmRef.current = midiBpm;
+    }
+  }, [midiBpm]);
 
   useEffect(() => {
     if (!loading && osmdRef.current) {
