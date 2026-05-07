@@ -1,19 +1,21 @@
 /**
- * OsmdView.jsx v9
+ * OsmdView.jsx v8.1
  * MXL → OSMD 악보 렌더링 + 커서 동기화 + 자동 스크롤
  *
  * ┌─────────────────────────────────────────────────────────────────┐
- * │ [커서 동기화 — v9: 진행률 기반 segment interpolation]            │
+ * │ [커서 동기화 — v8.1: beat 기반 매핑 (안정화)]                    │
  * │                                                                 │
- * │ BPM 변환, offset 보정, scale 보정 전부 불필요.                   │
- * │                                                                 │
- * │ 1. melodyTimes (MIDI 음표 시작 시간, 초 단위) 배열 사용          │
- * │ 2. cursorTimes (OSMD 커서 스텝 beat 값) 배열 사용               │
- * │ 3. 현재 재생 시간 → melodyTimes에서 음표 인덱스 찾기             │
- * │ 4. 음표 인덱스 → cursorTimes 스텝에 segment interpolation 매핑  │
- * │                                                                 │
- * │ 두 배열의 길이가 달라도 구간별 보간으로 정확하게 매핑됨.          │
- * │ BPM, offset, scale 등 외부 보정값 없이 자체 완결적으로 동작.     │
+ * │ 1. OSMD 로드 시 각 커서 스텝의 beat 값 수집 (cursorTimesRef)     │
+ * │ 2. MIDI에서 BPM 전달받음 (midiBpm prop)                         │
+ * │ 3. MIDI 재생 시간(초) → beat 변환:                               │
+ * │    adjustedSec = origSec - midiOffset                           │
+ * │    beat = (adjustedSec / scale) × (BPM / 60) / 4               │
+ * │    ※ OSMD realValue는 온음표=1.0 단위이므로 /4 필요             │
+ * │ 4. scale = MIDI 실제 연주 길이 / OSMD 추정 길이                  │
+ * │    - MIDI 연주 길이: melodyTimes 마지막 값 - 첫 값               │
+ * │    - OSMD 추정 길이: lastBeat × 4 × 60 / BPM                   │
+ * │    - melodyTimes 미로드 시 scale=1.0 (무보정)                    │
+ * │ 5. cursorTimesRef에서 현재 beat 이하의 마지막 인덱스 = 커서 위치  │
  * └─────────────────────────────────────────────────────────────────┘
  */
 import { useEffect, useRef, useState, useCallback } from "react";
@@ -26,12 +28,15 @@ export default function OsmdView({
   playing,
   scrollContainerRef,
   currentLoop = 0,
+  midiBpm = 0,
+  midiOffset = 0,
 }) {
   const containerRef = useRef(null);
   const osmdRef = useRef(null);
   const cursorIdxRef = useRef(0);
   const totalStepsRef = useRef(0);
   const cursorTimesRef = useRef([]);
+  const bpmRef = useRef(0);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -107,6 +112,12 @@ export default function OsmdView({
         totalStepsRef.current = times.length;
         cursorTimesRef.current = times;
 
+        // BPM 수집: OSMD → MIDI(prop) → 기본값 120
+        const srcMeasures = osmd.sheet?.SourceMeasures;
+        const osmdBpm = srcMeasures?.[0]?.TempoInBPM || 0;
+        const detectedBpm = osmdBpm > 0 ? osmdBpm : (midiBpm > 0 ? midiBpm : 120);
+        bpmRef.current = detectedBpm;
+
         osmd.cursor.reset();
         osmd.cursor.show();
         cursorIdxRef.current = 0;
@@ -115,7 +126,13 @@ export default function OsmdView({
         await new Promise((r) => requestAnimationFrame(r));
         forceCursorVisible();
 
-        console.log(`OSMD 준비: ${times.length}스텝`);
+        const bpmSource = osmdBpm > 0 ? "OSMD" : (midiBpm > 0 ? "MIDI" : "기본값");
+        const lastBeat = times.length > 0 ? times[times.length - 1] : 0;
+        const estDuration = detectedBpm > 0 ? (lastBeat * 4 * 60 / detectedBpm) : "N/A";
+        console.log(
+          `OSMD 준비: ${times.length}스텝, BPM=${detectedBpm}(${bpmSource}), ` +
+          `lastBeat=${lastBeat.toFixed(2)}, 추정길이=${typeof estDuration === "number" ? estDuration.toFixed(1) + "초" : estDuration}`
+        );
         if (!cancelled) setLoading(false);
       })
       .catch((err) => {
@@ -129,7 +146,7 @@ export default function OsmdView({
       cancelled = true;
       osmdRef.current = null;
     };
-  }, [mxlUrl, forceCursorVisible]);
+  }, [mxlUrl, forceCursorVisible, midiBpm]);
 
   useEffect(() => {
     if (!loading && osmdRef.current) {
@@ -157,52 +174,49 @@ export default function OsmdView({
     }
   }, [scrollContainerRef]);
 
-  // ── 커서 동기화: 진행률 기반 segment interpolation (v9) ──
+  // ── 커서 동기화: beat 기반 매핑 (v8.1) ──
   const getCursorTarget = useCallback(
     (origSec) => {
-      const totalSteps = totalStepsRef.current;
-      if (totalSteps === 0) return 0;
+      if (totalStepsRef.current === 0) return 0;
 
-      const mTimes = melodyTimes;
+      const cTimes = cursorTimesRef.current;
+      const bpm = bpmRef.current;
 
-      // ── melodyTimes가 유효할 때: segment interpolation ──
-      if (mTimes && mTimes.length >= 2) {
-        const firstMidi = mTimes[0];
-        const lastMidi = mTimes[mTimes.length - 1];
-        const midiRange = lastMidi - firstMidi;
+      // ── beat 기반 매핑 (BPM + cursorTimes 유효할 때) ──
+      if (bpm > 0 && cTimes.length > 0) {
+        const lastBeat = cTimes[cTimes.length - 1] || 1;
+        const osmdEstDuration = lastBeat * 4 * 60 / bpm;
 
-        if (midiRange <= 0) return 0;
-
-        // origSec가 첫 음표 전이면 스텝 0
-        if (origSec <= firstMidi) return 0;
-
-        // melodyTimes에서 현재 시간 위치의 음표 인덱스 (소수점 포함 보간)
-        let noteIdx = mTimes.length - 1;  // 마지막 음표 이후면 끝
-        for (let i = mTimes.length - 1; i >= 0; i--) {
-          if (mTimes[i] <= origSec) {
-            if (i < mTimes.length - 1) {
-              // 현재 음표와 다음 음표 사이의 보간 비율
-              const segDur = mTimes[i + 1] - mTimes[i];
-              const elapsed = origSec - mTimes[i];
-              noteIdx = i + (segDur > 0 ? elapsed / segDur : 0);
-            } else {
-              noteIdx = i;
-            }
-            break;
+        // scale 계산: melodyTimes가 유효하면 사용, 아니면 무보정(1.0)
+        const mTimes = melodyTimes;
+        let scale = 1.0;
+        if (mTimes && mTimes.length >= 2) {
+          const firstNote = mTimes[0];
+          const lastNote = mTimes[mTimes.length - 1];
+          const midiPlayDuration = lastNote - firstNote;
+          if (midiPlayDuration > 0 && osmdEstDuration > 0) {
+            scale = midiPlayDuration / osmdEstDuration;
           }
         }
 
-        // 음표 인덱스 → 커서 스텝 (비례 매핑)
-        const noteProgress = noteIdx / Math.max(1, mTimes.length - 1);
-        const targetStep = Math.round(noteProgress * (totalSteps - 1));
+        const adjustedSec = Math.max(0, origSec - midiOffset);
+        const currentBeat = (adjustedSec / scale) * (bpm / 60) / 4;
 
-        return Math.min(Math.max(0, targetStep), totalSteps - 1);
+        // cursorTimes에서 currentBeat 이하인 마지막 인덱스 찾기
+        let step = 0;
+        for (let i = cTimes.length - 1; i >= 0; i--) {
+          if (cTimes[i] <= currentBeat + 0.01) {
+            step = i;
+            break;
+          }
+        }
+        return Math.min(step, totalStepsRef.current - 1);
       }
 
-      // ── fallback: melodyTimes 없을 때 (MIDI 미로드) ──
+      // ── fallback: BPM 없을 때 ──
       return 0;
     },
-    [melodyTimes]
+    [melodyTimes, midiOffset]
   );
 
   // ── 디버그 로그용 ──
@@ -217,17 +231,20 @@ export default function OsmdView({
     // 디버그: 1초 간격으로 현재 상태 출력
     const now = Date.now();
     if (now - lastDebugRef.current > 1000) {
+      const bpm = bpmRef.current;
+      const cTimes = cursorTimesRef.current;
+      const lastBeat = cTimes.length > 0 ? cTimes[cTimes.length - 1] : 1;
+      const osmdEst = bpm > 0 ? lastBeat * 4 * 60 / bpm : 0;
       const mTimes = melodyTimes;
-      const mLen = mTimes?.length || 0;
-      const firstM = mLen > 0 ? mTimes[0] : 0;
-      const lastM = mLen > 0 ? mTimes[mLen - 1] : 0;
-      const range = lastM - firstM;
-      const progress = range > 0
-        ? ((originalTime - firstM) / range * 100).toFixed(1)
-        : "N/A";
+      let scale = 1.0;
+      if (mTimes && mTimes.length >= 2) {
+        const midiPlay = mTimes[mTimes.length - 1] - mTimes[0];
+        if (midiPlay > 0 && osmdEst > 0) scale = midiPlay / osmdEst;
+      }
       console.log(
-        `[커서] t=${originalTime.toFixed(2)}s, progress=${progress}%, ` +
-        `target=${target}/${totalStepsRef.current}, melodyNotes=${mLen}`
+        `[커서] t=${originalTime.toFixed(2)}s, scale=${scale.toFixed(3)}, ` +
+        `target=${target}/${totalStepsRef.current}, ` +
+        `cursorBeat=${cTimes[target]?.toFixed(2) || "?"}`
       );
       lastDebugRef.current = now;
     }
