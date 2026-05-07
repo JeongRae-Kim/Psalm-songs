@@ -1,35 +1,19 @@
 /**
- * OsmdView.jsx v7
+ * OsmdView.jsx v8
  * MXL → OSMD 악보 렌더링 + 커서 동기화 + 자동 스크롤
  *
  * ┌─────────────────────────────────────────────────────────────────┐
- * │ [커서 동기화 — 현재 방식: 비례 매핑]                              │
+ * │ [커서 동기화 — v8: beat 기반 매핑]                                │
  * │                                                                 │
- * │ targetStep = (noteIdx / melodyNotes) × totalCursorSteps         │
+ * │ 1. OSMD 로드 시 각 커서 스텝의 beat 값 수집 (cursorTimesRef)     │
+ * │ 2. OSMD에서 BPM 추출 (bpmRef)                                   │
+ * │ 3. MIDI 재생 시간(초) → beat 변환: beat = sec × (BPM / 60)      │
+ * │ 4. cursorTimesRef에서 현재 beat 이하의 마지막 인덱스 = 커서 위치  │
  * │                                                                 │
- * │ MIDI 노트 수(예: 54)와 OSMD 커서 스텝 수(예: 59)가 다를 때       │
- * │ 비례 변환으로 매핑. 대부분의 찬송가에서 잘 동작하지만,              │
- * │ 노트 밀도가 곡 구간별로 크게 다르면 오차 발생 가능.               │
+ * │ 이 방식은 음표 길이를 정확히 반영하므로 2분음표는 오래 머물고,    │
+ * │ 16분음표는 빠르게 넘어감.                                        │
  * │                                                                 │
- * │ [업그레이드: beat 기반 매칭]                                      │
- * │                                                                 │
- * │ 더 정확한 방식은 OSMD 커서의 각 스텝에서 수집한                    │
- * │ cursorTimesRef (beat 값)를 MIDI 시간(초)으로 변환하여              │
- * │ 직접 매칭하는 것:                                                │
- * │                                                                 │
- * │ 1. cursorTimesRef[i] = OSMD beat 값 (realValue)                 │
- * │ 2. beat → 초 변환: seconds = beat × (60 / BPM)                  │
- * │    ※ 변박곡은 구간별 BPM이 다르므로 MIDI의 time_signature/        │
- * │      set_tempo 이벤트를 파싱하여 구간별 변환 필요                  │
- * │ 3. 각 커서 스텝의 시간(초)과 현재 재생 시간(초)을 비교:            │
- * │    for (i = cursorTimes.length - 1; i >= 0; i--)                │
- * │      if (cursorSeconds[i] <= currentOrigSec) return i;          │
- * │                                                                 │
- * │ 구현 시 수정 포인트:                                              │
- * │ - OSMD 로드 시 cursorTimesRef에 beat 값 수집 (이미 구현됨)        │
- * │ - useMidiPlayer에서 BPM 정보 전달 (이미 구현됨)                   │
- * │ - getCursorTarget()에서 beat→초 변환 후 이진 검색                 │
- * │ - 변박곡 대응: MIDI header의 tempos 배열로 구간별 BPM 매핑         │
+ * │ fallback: BPM 추출 실패 시 기존 비례 매핑 사용                   │
  * └─────────────────────────────────────────────────────────────────┘
  */
 import { useEffect, useRef, useState, useCallback } from "react";
@@ -55,6 +39,7 @@ export default function OsmdView({
    * 변박곡인 경우 구간별 BPM을 적용해야 정확함
    */
   const cursorTimesRef = useRef([]);
+  const bpmRef = useRef(0);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -133,6 +118,11 @@ export default function OsmdView({
         totalStepsRef.current = times.length;
         cursorTimesRef.current = times;
 
+        // BPM 수집 (beat → 초 변환에 필요)
+        const srcMeasures = osmd.sheet?.SourceMeasures;
+        const detectedBpm = srcMeasures?.[0]?.TempoInBPM || 0;
+        bpmRef.current = detectedBpm;
+
         // 리셋
         osmd.cursor.reset();
         osmd.cursor.show();
@@ -144,7 +134,13 @@ export default function OsmdView({
         await new Promise((r) => requestAnimationFrame(r));
         forceCursorVisible();
 
-        console.log("OSMD 준비:", times.length, "커서 스텝");
+        // 디버그: beat 기반 매핑 검증용
+        const lastBeat = times.length > 0 ? times[times.length - 1] : 0;
+        const estDuration = detectedBpm > 0 ? (lastBeat * 60 / detectedBpm) : "N/A";
+        console.log(
+          `OSMD 준비: ${times.length}스텝, BPM=${detectedBpm}, ` +
+          `lastBeat=${lastBeat.toFixed(2)}, 추정길이=${typeof estDuration === "number" ? estDuration.toFixed(1) + "초" : estDuration}`
+        );
         if (!cancelled) setLoading(false);
       })
       .catch((err) => {
@@ -187,20 +183,38 @@ export default function OsmdView({
     }
   }, [scrollContainerRef]);
 
-  // ── 커서 동기화: 비례 매핑 방식 ──
-  // (beat 기반 매칭으로 업그레이드 시 이 함수를 교체 — 상단 주석 참고)
+  // ── 커서 동기화: beat 기반 매핑 (v8) ──
+  // BPM과 cursorTimesRef가 유효하면 beat 기반, 아니면 기존 비례 매핑 fallback
   const getCursorTarget = useCallback(
     (origSec) => {
       if (totalStepsRef.current === 0) return 0;
 
+      const cTimes = cursorTimesRef.current;
+      const bpm = bpmRef.current;
+
+      // ── beat 기반 매핑 (BPM + cursorTimes 둘 다 유효할 때) ──
+      if (bpm > 0 && cTimes.length > 0) {
+        // 재생 시간(초) → beat 변환: beat = seconds × (BPM / 60)
+        const currentBeat = origSec * (bpm / 60);
+
+        // cursorTimes에서 currentBeat 이하인 마지막 인덱스 찾기
+        let step = 0;
+        for (let i = cTimes.length - 1; i >= 0; i--) {
+          if (cTimes[i] <= currentBeat + 0.01) { // 부동소수점 오차 허용
+            step = i;
+            break;
+          }
+        }
+        return Math.min(step, totalStepsRef.current - 1);
+      }
+
+      // ── fallback: 기존 비례 매핑 (BPM 없는 곡) ──
       const mTimes = melodyTimes;
       if (!mTimes || mTimes.length === 0) {
-        // 멜로디 타이밍 없으면 시간 비례
         const totalDur = 34;
         return Math.floor((origSec / totalDur) * totalStepsRef.current);
       }
 
-      // 현재 시간 → 멜로디 노트 인덱스
       const adjusted = origSec + 0.05;
       let noteIdx = 0;
       for (let i = mTimes.length - 1; i >= 0; i--) {
@@ -210,10 +224,8 @@ export default function OsmdView({
         }
       }
 
-      // 비례 변환: noteIdx / melodyNotes ≈ cursorStep / totalSteps
       const ratio = noteIdx / Math.max(1, mTimes.length - 1);
       const targetStep = Math.round(ratio * (totalStepsRef.current - 1));
-
       return Math.min(targetStep, totalStepsRef.current - 1);
     },
     [melodyTimes]
