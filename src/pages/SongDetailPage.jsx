@@ -6,10 +6,12 @@ import useRecent from "../hooks/useRecent";
 import useMemos from "../hooks/useMemos";
 import useMidiPlayer from "../hooks/useMidiPlayer";
 import useMetronomePlayer from "../hooks/useMetronomePlayer";
+import useMxlPlayer from "../hooks/useMxlPlayer";
 import LyricsView from "../components/LyricsView";
 import SheetView from "../components/SheetView";
 import MemoEditor from "../components/MemoEditor";
 import OsmdView from "../components/OsmdView";
+import OsmdViewMxl from "../components/OsmdViewMxl";
 import HomeIcon from "../components/icons/HomeIcon";
 
 /* ── 아이콘 SVG ── */
@@ -115,12 +117,15 @@ export default function SongDetailPage() {
   const hasMxl = Boolean(song?.mxlFile);
   const hasPractice = hasMxl;
   const hasMetronome = hasMxl;  // 박자연습은 mxl만 있으면 가능
+  const hasMxlPlayer = hasMxl;  // ⭐ MXL재생 탭도 mxl만 있으면 가능
 
   // 반복 횟수: 가사 절수만큼 자동 반복 (전주는 mid에 포함되어 있으면 매 반복마다 들림)
   const totalLoops = song?.verses?.length || 1;
 
   const midi = useMidiPlayer(hasMidi ? song.midiFile : null, totalLoops);
   const metronome = useMetronomePlayer(hasMxl ? song.mxlFile : null, totalLoops);
+  // ⭐ MXL재생 탭: midi.tempo를 BPM으로 차용 (Phase 1 PoC, 옵션 c)
+  const mxl = useMxlPlayer(hasMxlPlayer ? song.mxlFile : null, totalLoops, midi.tempo);
 
   // 곡 변경 시: 현재 탭이 새 곡에서 유효한지 검사 (패턴 C — 조건부 유지)
   useEffect(() => {
@@ -134,6 +139,7 @@ export default function SongDetailPage() {
       activeTab === "sheet" ||                          // 악보는 모든 곡 보유
       (activeTab === "practice" && songHasMxl) ||       // 연습은 mxl 필요
       (activeTab === "metronome" && songHasMxl) ||      // 박자연습도 mxl 필요
+      (activeTab === "mxlplay" && songHasMxl) ||        // ⭐ MXL재생도 mxl 필요
       (activeTab === "lyrics" && songHasLyrics);        // 가사는 verses 필요
 
     if (!tabValid) {
@@ -142,12 +148,14 @@ export default function SongDetailPage() {
 
     if (midi.ready) midi.stop();
     if (metronome.ready) metronome.stop();
+    if (mxl.ready) mxl.stop();  // ⭐ MXL재생 탭 stop 추가
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, songs]);
 
   useEffect(() => {
     if (activeTab !== "practice" && midi.playing) midi.stop();
     if (activeTab !== "metronome" && metronome.playing) metronome.stop();
+    if (activeTab !== "mxlplay" && mxl.playing) mxl.stop();  // ⭐ MXL재생 탭 stop 추가
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
@@ -199,6 +207,7 @@ export default function SongDetailPage() {
     { key: "sheet", label: "악보" },
     ...(hasPractice ? [{ key: "practice", label: "연습" }] : []),
     ...(hasMetronome ? [{ key: "metronome", label: "박자연습" }] : []),
+    ...(hasMxlPlayer ? [{ key: "mxlplay", label: "MXL재생" }] : []),  // ⭐ 신규 탭
     { key: "lyrics", label: "가사" },
   ];
 
@@ -222,6 +231,12 @@ export default function SongDetailPage() {
   const handleMetronomeProgressClick = (e) => {
     const rect = e.currentTarget.getBoundingClientRect();
     metronome.seekTo(Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)));
+  };
+
+  // ⭐ MXL재생 progress 클릭 핸들러 추가
+  const handleMxlProgressClick = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    mxl.seekTo(Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)));
   };
 
   return (
@@ -322,6 +337,29 @@ export default function SongDetailPage() {
                 melodyTimes={metronome.melodyTimes} playing={metronome.playing} scrollContainerRef={mainRef}
                 currentLoop={metronome.currentLoop} midiBpm={metronome.tempo}
                 midiOffset={metronome.melodyTimes?.[0] || 0} />
+            </div>
+          )}
+
+          {/* ⭐ MXL재생 탭 (신규) — 항상 마운트, OsmdViewMxl 사용 */}
+          {hasMxlPlayer && (
+            <div
+              style={{
+                visibility: activeTab === "mxlplay" ? "visible" : "hidden",
+                position: activeTab === "mxlplay" ? "static" : "absolute",
+                top: 0,
+                left: 0,
+                right: 0,
+                pointerEvents: activeTab === "mxlplay" ? "auto" : "none",
+                zIndex: activeTab === "mxlplay" ? 1 : -1,
+              }}
+            >
+              <OsmdViewMxl
+                mxlUrl={song.mxlFile}
+                currentStepIdx={mxl.currentStepIdx}
+                playing={mxl.playing}
+                scrollContainerRef={mainRef}
+                currentLoop={mxl.currentLoop}
+              />
             </div>
           )}
         </div>
@@ -456,6 +494,61 @@ export default function SongDetailPage() {
                     className="shrink-0 h-1 accent-white opacity-50"
                     style={{ width: "45px" }} title={`${metronome.tempo} BPM`} />
                   <span className="shrink-0 text-[9px] text-white/40 w-5">{metronome.tempo}</span>
+                </div>
+              ) : activeTab === "mxlplay" && mxl.ready ? (
+                /* ⭐ MXL재생 탭 미니 플레이어 (MXL 단일재생) */
+                <div className="flex-1 flex items-center gap-1.5 min-w-0">
+                  {/* 정지 (처음으로) */}
+                  <button onClick={mxl.stop}
+                    className="shrink-0 w-6 h-6 flex items-center justify-center text-white/60 hover:text-white transition-colors"
+                    title="처음으로"><StopSmall /></button>
+
+                  {/* 재생 */}
+                  <button onClick={mxl.play}
+                    disabled={mxl.playing}
+                    className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition-colors
+                      ${mxl.playing ? "bg-white/5 text-white/30" : "bg-white/15 text-white hover:bg-white/25 active:bg-white/35"}`}
+                    title="재생"><PlaySmall /></button>
+
+                  {/* 일시정지 */}
+                  <button onClick={mxl.pause}
+                    disabled={!mxl.playing}
+                    className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition-colors
+                      ${!mxl.playing ? "bg-white/5 text-white/30" : "bg-white/15 text-white hover:bg-white/25 active:bg-white/35"}`}
+                    title="일시정지"><PauseSmall /></button>
+
+                  {/* 시간 */}
+                  <span className="shrink-0 text-[10px] text-white/50 w-7 text-right">
+                    {formatTime(mxl.displayTime)}
+                  </span>
+
+                  {/* 프로그레스 바 */}
+                  <div onClick={handleMxlProgressClick}
+                    className="flex-1 h-1.5 rounded-full cursor-pointer overflow-hidden min-w-[40px]"
+                    style={{ backgroundColor: "rgba(255,255,255,0.15)" }}>
+                    <div className="h-full rounded-full"
+                      style={{ width: `${Math.min(100, mxl.progress * 100)}%`, backgroundColor: "rgba(255,255,255,0.7)", transition: "none" }} />
+                  </div>
+
+                  {/* 총 시간 */}
+                  <span className="shrink-0 text-[10px] text-white/50 w-7">
+                    {formatTime(mxl.duration)}
+                  </span>
+
+                  {/* 절 카운트 */}
+                  {mxl.totalLoops > 1 && (
+                    <span className="shrink-0 text-[10px] text-white/60 ml-1" title={`${mxl.currentLoop + 1}/${mxl.totalLoops}절`}>
+                      {mxl.currentLoop + 1}/{mxl.totalLoops}
+                    </span>
+                  )}
+
+                  {/* 템포 */}
+                  <input type="range" min={60} max={200} step={1}
+                    value={mxl.tempo}
+                    onChange={(e) => mxl.changeTempo(Number(e.target.value))}
+                    className="shrink-0 h-1 accent-white opacity-50"
+                    style={{ width: "45px" }} title={`${mxl.tempo} BPM`} />
+                  <span className="shrink-0 text-[9px] text-white/40 w-5">{mxl.tempo}</span>
                 </div>
               ) : (
                 <span className="flex-1 text-center text-xs font-medium text-white/90">

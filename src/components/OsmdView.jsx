@@ -99,7 +99,6 @@ export default function OsmdView({
 
         osmd.render();
         osmdRef.current = osmd;
-        if (typeof window !== "undefined") window.__osmd = osmd;  // ★ M1 검증용 임시 (검증 후 제거)
         osmd.cursor.show();
 
         // 각 커서 스텝의 timestamp(beat) 수집
