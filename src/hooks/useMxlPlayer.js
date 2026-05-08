@@ -1,13 +1,18 @@
 /**
- * useMxlPlayer.js v1.1 (진단 로그 강화)
+ * useMxlPlayer.js v1.2
  * MXL 파일에서 직접 음표 추출 → smplr SplendidGrandPiano 재생 + 커서 동기화
  *
- * v1.1 변경:
- * - 모든 단계에 [MXL] 진단 로그 추가 (어디서 멈추는지 추적)
- * - 에러 발생해도 ready=true로 두어 미니 플레이어 노출 (디버깅용)
- * - 음표 0개 시 play() 호출하면 alert로 알림
+ * v1.2 수정 (v1.1 진단 결과 반영):
+ * - osmd.render() 호출 추가 (cursor 사용을 위해 필수)
+ * - midiBpm > 0 가드 추가 (MIDI 로드 전 무의미한 실행 회피)
+ * - 진단 로그는 유지 (검증용)
  *
- * 검증 후 v1.2에서 정상화 + 진단 로그 제거 예정
+ * 진단 결과 분석:
+ * - v1.1에서 "TypeError: Cannot read properties of undefined (reading 'reset')" 발견
+ * - 원인: osmd.load 후 render() 호출 누락 → cursor가 초기화 안 됨
+ * - 부수 발견: midiBpm 변경으로 useEffect가 두 번 실행됨 (120 → 110)
+ *
+ * 검증 후 v1.3에서 진단 로그 정리 예정
  */
 import { useState, useRef, useCallback, useEffect } from "react";
 import { OpenSheetMusicDisplay } from "opensheetmusicdisplay";
@@ -50,11 +55,17 @@ export default function useMxlPlayer(mxlUrl, totalLoops = 1, midiBpm = 0) {
 
   const tempoRatio = useCallback(() => originalBpmRef.current / tempo, [tempo]);
 
-  // ── MXL 로드 + 음표 추출 (진단 로그 강화) ──
+  // ── MXL 로드 + 음표 추출 ──
   useEffect(() => {
     if (!mxlUrl) {
       console.log("[MXL] mxlUrl 없음, 종료");
       setReady(false);
+      return;
+    }
+
+    // ⭐ v1.2: midiBpm 가드 — MIDI BPM 안정화 후에만 실행
+    if (midiBpm <= 0) {
+      console.log(`[MXL] midiBpm=${midiBpm} 대기 중 (MIDI 로드 후 자동 재시작)`);
       return;
     }
 
@@ -130,8 +141,28 @@ export default function useMxlPlayer(mxlUrl, totalLoops = 1, midiBpm = 0) {
           return;
         }
 
+        // ⭐ v1.2: render() 호출 추가 (cursor 사용 가능하게)
+        try {
+          osmd.render();
+          console.log("[MXL] 5c) osmd.render() 성공");
+        } catch (e) {
+          console.error(`[MXL] 5c) osmd.render() 실패: ${e.message}`);
+          throw new Error(`OSMD render 실패: ${e.message}`);
+        }
+
+        if (cancelled) {
+          console.log("[MXL] cancelled, render 후 종료");
+          return;
+        }
+
         console.log("[MXL] 6) cursor 순회 시작");
         const notesData = [];
+
+        // ⭐ v1.2: cursor 안전 검사
+        if (!osmd.cursor) {
+          throw new Error("osmd.cursor가 undefined (render 누락 가능)");
+        }
+
         osmd.cursor.reset();
         let stepIdx = 0;
         let totalNotesEncountered = 0;
@@ -225,7 +256,7 @@ export default function useMxlPlayer(mxlUrl, totalLoops = 1, midiBpm = 0) {
         if (!cancelled) {
           console.error(`[MXL] ❌ 최종 실패:`, e);
           setError(e.message);
-          setReady(true);  // ⚠️ 디버깅용
+          setReady(true);  // 디버깅용
           setLoading(false);
         }
       })
