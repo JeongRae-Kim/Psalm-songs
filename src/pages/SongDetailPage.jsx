@@ -13,7 +13,7 @@ import MemoEditor from "../components/MemoEditor";
 import OsmdView from "../components/OsmdView";
 import OsmdViewMxl from "../components/OsmdViewMxl";
 import HomeIcon from "../components/icons/HomeIcon";
-import MiniPlayer from "../components/MiniPlayer";       // ⭐ 추가
+import MiniPlayer from "../components/MiniPlayer";
 
 /* ── 아이콘 SVG (페이지 전용 — 미니플레이어 아이콘은 MiniPlayer로 이동) ── */
 const SettingsIcon = () => (
@@ -112,8 +112,7 @@ export default function SongDetailPage() {
 
   // 탭 전환 시 비활성 플레이어 정지
   useEffect(() => {
-    if (activeTab !== "sheet" && activeTab !== "practice" && midi.playing) midi.stop();
-    if (activeTab !== "practice" && activeTab !== "sheet" && midi.playing) midi.stop();
+    if (!["sheet", "practice", "lyrics"].includes(activeTab) && midi.playing) midi.stop();
     if (activeTab !== "metronome" && metronome.playing) metronome.stop();
     if (activeTab !== "mxlplay" && mxl.playing) mxl.stop();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -314,6 +313,8 @@ export default function SongDetailPage() {
                 <MiniPlayer player={metronome} showSoundToggle />
               ) : activeTab === "mxlplay" ? (
                 <MiniPlayer player={mxl} />
+              ) : activeTab === "lyrics" && hasMidi ? (
+                <MiniPlayer player={midi} />
               ) : (
                 <span className="flex-1 text-center text-xs font-medium text-white/90">
                   {scriptureLabel}
