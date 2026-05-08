@@ -1,18 +1,28 @@
 /**
- * useMxlPlayer.js v1.2
+ * useMxlPlayer.js v1.3
  * MXL 파일에서 직접 음표 추출 → smplr SplendidGrandPiano 재생 + 커서 동기화
  *
- * v1.2 수정 (v1.1 진단 결과 반영):
- * - osmd.render() 호출 추가 (cursor 사용을 위해 필수)
- * - midiBpm > 0 가드 추가 (MIDI 로드 전 무의미한 실행 회피)
- * - 진단 로그는 유지 (검증용)
+ * 설계 명세: MXL_단일재생_설계명세_v1.md
  *
- * 진단 결과 분석:
- * - v1.1에서 "TypeError: Cannot read properties of undefined (reading 'reset')" 발견
- * - 원인: osmd.load 후 render() 호출 누락 → cursor가 초기화 안 됨
- * - 부수 발견: midiBpm 변경으로 useEffect가 두 번 실행됨 (120 → 110)
+ * 핵심 동작:
+ * 1. mxlUrl 로드 → 화면 밖 임시 OSMD 인스턴스로 파싱 + render
+ * 2. cursor 순회로 notesData 수집:
+ *    [{ stepIdx, midi: halfTone + 12, timeBeat, durationBeat }, ...]
+ * 3. BPM = midiBpm prop (Phase 1: MIDI BPM 차용, Phase 4에서 song.bpm으로 전환 예정)
+ * 4. play(): notesData를 setTimeout으로 스케줄
+ * 5. tick(): currentTime → currentStepIdx 갱신
+ * 6. OsmdViewMxl이 currentStepIdx로 직접 cursor 이동
  *
- * 검증 후 v1.3에서 진단 로그 정리 예정
+ * 검증 데이터 반영 (M1):
+ * - midi = halfTone + 12 (검증 v2)
+ * - isRest()는 함수 호출 (곡에 따라 0~8개)
+ * - 빈 공간 무시 (OSMD timeBeat=0부터 시작)
+ * - 다성부 모두 재생 (NotesUnderCursor 결과 그대로)
+ *
+ * v1.3 변경 (v1.2 → v1.3):
+ * - 단계별 진단 로그 [MXL] 1) 2) 3) ... 제거
+ * - 한 줄 완료 로그만 유지
+ * - 안전장치 (render 가드, cursor 검사, 음표 0개 alert) 유지
  */
 import { useState, useRef, useCallback, useEffect } from "react";
 import { OpenSheetMusicDisplay } from "opensheetmusicdisplay";
@@ -58,31 +68,25 @@ export default function useMxlPlayer(mxlUrl, totalLoops = 1, midiBpm = 0) {
   // ── MXL 로드 + 음표 추출 ──
   useEffect(() => {
     if (!mxlUrl) {
-      console.log("[MXL] mxlUrl 없음, 종료");
       setReady(false);
       return;
     }
 
-    // ⭐ v1.2: midiBpm 가드 — MIDI BPM 안정화 후에만 실행
-    if (midiBpm <= 0) {
-      console.log(`[MXL] midiBpm=${midiBpm} 대기 중 (MIDI 로드 후 자동 재시작)`);
-      return;
-    }
-
-    console.log(`[MXL] === 시작: mxlUrl=${mxlUrl}, midiBpm=${midiBpm} ===`);
+    // midiBpm 가드: MIDI BPM 안정화 후에만 실행 (Phase 1 옵션 c)
+    if (midiBpm <= 0) return;
 
     let cancelled = false;
     setLoading(true);
     setError(null);
     setReady(false);
 
+    // 화면 밖 임시 OSMD 컨테이너
     const tempContainer = document.createElement("div");
     tempContainer.style.position = "absolute";
     tempContainer.style.left = "-99999px";
     tempContainer.style.width = "100px";
     tempContainer.style.height = "100px";
     document.body.appendChild(tempContainer);
-    console.log("[MXL] 1) 임시 컨테이너 생성 OK");
 
     let osmd;
     try {
@@ -92,141 +96,101 @@ export default function useMxlPlayer(mxlUrl, totalLoops = 1, midiBpm = 0) {
         drawComposer: false,
         drawLyricist: false,
       });
-      console.log("[MXL] 2) OSMD 인스턴스 생성 OK");
     } catch (e) {
-      console.error("[MXL] 2) OSMD 인스턴스 생성 실패:", e);
+      console.error("[MXL] OSMD 인스턴스 생성 실패:", e);
       setError(`OSMD 생성 실패: ${e.message}`);
       setReady(true);
       setLoading(false);
       return () => {
-        try {
-          if (tempContainer.parentNode) tempContainer.parentNode.removeChild(tempContainer);
-        } catch (e) {}
+        try { tempContainer.parentNode?.removeChild(tempContainer); } catch (e) {}
       };
     }
 
     fetch(mxlUrl)
       .then((r) => {
-        console.log(`[MXL] 3) fetch 응답 status=${r.status}`);
         if (!r.ok) throw new Error(`MXL 로드 실패 status=${r.status}`);
         return r.arrayBuffer();
       })
       .then(async (buf) => {
-        if (cancelled) {
-          console.log("[MXL] cancelled, fetch 후 종료");
-          return;
-        }
-        console.log(`[MXL] 4) ArrayBuffer 수신, 크기=${buf.byteLength} bytes`);
+        if (cancelled) return;
 
-        let osmdLoaded = false;
+        // OSMD 로드 (ArrayBuffer 우선, 실패 시 URL fallback)
         try {
           await osmd.load(buf);
-          osmdLoaded = true;
-          console.log("[MXL] 5a) osmd.load(ArrayBuffer) 성공");
         } catch (e1) {
-          console.warn(`[MXL] 5a) osmd.load(ArrayBuffer) 실패: ${e1.message}`);
-          console.log("[MXL] 5b) osmd.load(URL) 시도");
           try {
             await osmd.load(mxlUrl);
-            osmdLoaded = true;
-            console.log("[MXL] 5b) osmd.load(URL) 성공");
           } catch (e2) {
-            console.error(`[MXL] 5b) osmd.load(URL) 실패: ${e2.message}`);
-            throw new Error(`OSMD 로드 완전 실패: ArrayBuffer=${e1.message}, URL=${e2.message}`);
+            throw new Error(`OSMD 로드 실패: ${e2.message}`);
           }
         }
 
-        if (cancelled) {
-          console.log("[MXL] cancelled, OSMD 로드 후 종료");
-          return;
-        }
+        if (cancelled) return;
 
-        // ⭐ v1.2: render() 호출 추가 (cursor 사용 가능하게)
+        // render 호출 (cursor 사용을 위해 필수)
         try {
           osmd.render();
-          console.log("[MXL] 5c) osmd.render() 성공");
         } catch (e) {
-          console.error(`[MXL] 5c) osmd.render() 실패: ${e.message}`);
           throw new Error(`OSMD render 실패: ${e.message}`);
         }
 
-        if (cancelled) {
-          console.log("[MXL] cancelled, render 후 종료");
-          return;
-        }
+        if (cancelled) return;
 
-        console.log("[MXL] 6) cursor 순회 시작");
-        const notesData = [];
-
-        // ⭐ v1.2: cursor 안전 검사
+        // cursor 안전 검사
         if (!osmd.cursor) {
           throw new Error("osmd.cursor가 undefined (render 누락 가능)");
         }
 
+        // notesData 수집
+        const notesData = [];
         osmd.cursor.reset();
         let stepIdx = 0;
-        let totalNotesEncountered = 0;
-        let totalRestsEncountered = 0;
 
-        try {
-          while (!osmd.cursor.iterator.endReached) {
-            const ts = osmd.cursor.iterator.currentTimeStamp;
-            const timeBeat = ts ? ts.realValue : null;
-            const ns = osmd.cursor.NotesUnderCursor() || [];
+        while (!osmd.cursor.iterator.endReached) {
+          const ts = osmd.cursor.iterator.currentTimeStamp;
+          const timeBeat = ts ? ts.realValue : null;
+          const ns = osmd.cursor.NotesUnderCursor() || [];
 
-            if (timeBeat !== null) {
-              ns.forEach((n) => {
-                let isRest = false;
-                try {
-                  isRest = typeof n.isRest === "function" ? n.isRest() : !!n.isRest;
-                } catch (e) {
-                  isRest = false;
-                }
-                if (isRest) {
-                  totalRestsEncountered++;
-                  return;
-                }
+          if (timeBeat !== null) {
+            ns.forEach((n) => {
+              // 쉼표 필터링 (isRest는 함수)
+              let isRest = false;
+              try {
+                isRest = typeof n.isRest === "function" ? n.isRest() : !!n.isRest;
+              } catch (e) {
+                isRest = false;
+              }
+              if (isRest) return;
 
-                if (typeof n.halfTone !== "number") {
-                  return;
-                }
+              if (typeof n.halfTone !== "number") return;
 
-                totalNotesEncountered++;
-                const durationBeat = n.length?.realValue || 0.25;
+              const durationBeat = n.length?.realValue || 0.25;
 
-                notesData.push({
-                  stepIdx,
-                  midi: n.halfTone + 12,
-                  timeBeat,
-                  durationBeat,
-                });
+              notesData.push({
+                stepIdx,
+                midi: n.halfTone + 12,
+                timeBeat,
+                durationBeat,
               });
-            }
-
-            osmd.cursor.next();
-            stepIdx++;
+            });
           }
-        } catch (e) {
-          console.error(`[MXL] 6) cursor 순회 중 에러 (stepIdx=${stepIdx}):`, e);
-          throw new Error(`cursor 순회 실패: ${e.message}`);
+
+          osmd.cursor.next();
+          stepIdx++;
         }
 
         const totalSteps = stepIdx;
         notesDataRef.current = notesData;
         totalStepsRef.current = totalSteps;
-        console.log(`[MXL] 6) cursor 순회 완료: totalSteps=${totalSteps}, 음표=${totalNotesEncountered}, 쉼표=${totalRestsEncountered}`);
 
-        if (notesData.length === 0) {
-          console.warn("[MXL] ⚠️ 음표 0개! useMxlPlayer ready=true로 두지만 재생 시 무음");
-        }
-
+        // BPM 결정 (MIDI 차용, Phase 4에서 song.bpm으로 전환 예정)
         const detectedBpm = midiBpm > 0
           ? midiBpm
           : (osmd.Sheet?.DefaultStartTempoInBpm || DEFAULT_BPM);
         originalBpmRef.current = detectedBpm;
         setTempo(detectedBpm);
-        console.log(`[MXL] 7) BPM 결정: ${detectedBpm} (midiBpm prop=${midiBpm})`);
 
+        // originalDuration 계산
         let origDuration = 0;
         if (notesData.length > 0) {
           const lastNote = notesData[notesData.length - 1];
@@ -235,18 +199,15 @@ export default function useMxlPlayer(mxlUrl, totalLoops = 1, midiBpm = 0) {
         }
         originalDurationRef.current = origDuration;
         setDuration(origDuration);
-        console.log(`[MXL] 8) originalDuration=${origDuration.toFixed(2)}초`);
 
+        // melodyTimes 호환 (사용 안 하지만 인터페이스 유지)
         const uniqueBeats = [...new Set(notesData.map(n => n.timeBeat))].sort((a, b) => a - b);
         melodyTimesRef.current = uniqueBeats.map(b => b * 240 / detectedBpm);
 
-        const halfTones = notesData.map(n => n.midi - 12);
-        const minHt = halfTones.length > 0 ? Math.min(...halfTones) : 0;
-        const maxHt = halfTones.length > 0 ? Math.max(...halfTones) : 0;
+        // 한 줄 완료 로그만 유지
         console.log(
-          `[MXL] === 완료: 음표=${notesData.length}, totalSteps=${totalSteps}, ` +
-          `BPM=${detectedBpm}(${midiBpm > 0 ? "MIDI차용" : "MXL/기본"}), ` +
-          `originalDuration=${origDuration.toFixed(2)}초, halfTone범위=${minHt}~${maxHt} ===`
+          `[MXL] 음표=${notesData.length}, totalSteps=${totalSteps}, ` +
+          `BPM=${detectedBpm}, originalDuration=${origDuration.toFixed(2)}초`
         );
 
         setLoading(false);
@@ -254,9 +215,9 @@ export default function useMxlPlayer(mxlUrl, totalLoops = 1, midiBpm = 0) {
       })
       .catch((e) => {
         if (!cancelled) {
-          console.error(`[MXL] ❌ 최종 실패:`, e);
+          console.error(`[MXL] 로드 실패:`, e.message);
           setError(e.message);
-          setReady(true);  // 디버깅용
+          setReady(true);  // 미니 플레이어 노출용 (재생 시도 시 alert)
           setLoading(false);
         }
       })
@@ -266,7 +227,6 @@ export default function useMxlPlayer(mxlUrl, totalLoops = 1, midiBpm = 0) {
             tempContainer.parentNode.removeChild(tempContainer);
           }
         } catch (e) { /* 무시 */ }
-        console.log("[MXL] cleanup: 임시 컨테이너 제거");
       });
 
     return () => {
@@ -279,6 +239,7 @@ export default function useMxlPlayer(mxlUrl, totalLoops = 1, midiBpm = 0) {
     };
   }, [mxlUrl, midiBpm]);
 
+  // ── 피아노 초기화 ──
   const ensurePiano = useCallback(async () => {
     if (pianoRef.current) return;
     setPianoLoading(true);
@@ -290,6 +251,7 @@ export default function useMxlPlayer(mxlUrl, totalLoops = 1, midiBpm = 0) {
     setPianoLoading(false);
   }, []);
 
+  // ── 노트 스케줄링 ──
   const scheduleNotes = useCallback((fromTime) => {
     scheduledRef.current.forEach((id) => clearTimeout(id));
     scheduledRef.current = [];
@@ -321,6 +283,7 @@ export default function useMxlPlayer(mxlUrl, totalLoops = 1, midiBpm = 0) {
       }
     });
 
+    // 곡 끝 도달 시: 다음 loop 또는 정지
     const endDelay = (originalDurationRef.current - fromTime) * r * 1000;
     const endId = setTimeout(() => {
       if (!playingRef.current) return;
@@ -351,6 +314,7 @@ export default function useMxlPlayer(mxlUrl, totalLoops = 1, midiBpm = 0) {
 
   const stopRef = useRef(null);
 
+  // ── tick: currentTime + currentStepIdx 갱신 ──
   const tick = useCallback(() => {
     if (!playingRef.current) return;
     const ctx = audioCtxRef.current;
@@ -375,13 +339,10 @@ export default function useMxlPlayer(mxlUrl, totalLoops = 1, midiBpm = 0) {
     rafRef.current = requestAnimationFrame(tick);
   }, []);
 
+  // ── 재생 ──
   const play = useCallback(async () => {
-    if (!ready) {
-      console.warn("[MXL] play: ready=false, 무시");
-      return;
-    }
+    if (!ready) return;
     if (notesDataRef.current.length === 0) {
-      console.warn("[MXL] play: 음표 0개, 재생 무시. error=", error);
       alert(`MXL 재생 실패: ${error || "음표 추출 실패"}`);
       return;
     }
@@ -468,6 +429,7 @@ export default function useMxlPlayer(mxlUrl, totalLoops = 1, midiBpm = 0) {
     };
   }, []);
 
+  // ── 계산값 ──
   const r = tempoRatio();
   const adjustedDuration = originalDurationRef.current * r;
   const adjustedCurrentTime = currentTime * r;
@@ -488,7 +450,7 @@ export default function useMxlPlayer(mxlUrl, totalLoops = 1, midiBpm = 0) {
     progress,
     tempo,
     melodyTimes: melodyTimesRef.current,
-    currentStepIdx,
+    currentStepIdx,                           // OsmdViewMxl이 사용
     totalSteps: totalStepsRef.current,
     currentLoop,
     totalLoops,
