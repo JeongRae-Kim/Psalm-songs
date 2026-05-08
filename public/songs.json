@@ -42,7 +42,8 @@
       "sheetImage": "/sheets/psalm-006.png",
       "sheetPdf": "/sheets/psalm-006.pdf",
       "midiFile": "/midi/psalm-006.mid",
-      "mxlFile": "/mxl/psalm-006.mxl"
+      "mxlFile": "/mxl/psalm-006.mxl",
+      "bpm": 110
     },
     {
       "id": "psalm-23",
@@ -80,7 +81,8 @@
       "sheetImage": "/sheets/psalm-023.png",
       "sheetPdf": "/sheets/psalm-023.pdf",
       "midiFile": "/midi/psalm-023.mid",
-      "mxlFile": "/mxl/psalm-023.mxl"
+      "mxlFile": "/mxl/psalm-023.mxl",
+      "bpm": 110
     },
     {
       "id": "psalm-40",
@@ -118,7 +120,8 @@
       "sheetImage": "/sheets/psalm-040.png",
       "sheetPdf": "/sheets/psalm-040.pdf",
       "midiFile": "/midi/psalm-040.mid",
-      "mxlFile": "/mxl/psalm-040.mxl"
+      "mxlFile": "/mxl/psalm-040.mxl",
+      "bpm": 105
     },
     {
       "id": "psalm-42-1",
@@ -164,7 +167,8 @@
       "sheetImage": "/sheets/psalm-042-1.png",
       "sheetPdf": "/sheets/psalm-042-1.pdf",
       "midiFile": "/midi/psalm-042-1.mid",
-      "mxlFile": "/mxl/psalm-042-1.mxl"
+      "mxlFile": "/mxl/psalm-042-1.mxl",
+      "bpm": 115
     },
     {
       "id": "psalm-42-6",
@@ -202,7 +206,8 @@
       "sheetImage": "/sheets/psalm-042-6.png",
       "sheetPdf": "/sheets/psalm-042-6.pdf",
       "midiFile": "/midi/psalm-042-6.mid",
-      "mxlFile": "/mxl/psalm-042-6.mxl"
+      "mxlFile": "/mxl/psalm-042-6.mxl",
+      "bpm": 115
     },
     {
       "id": "psalm-84",
@@ -228,7 +233,8 @@
       "sheetImage": "/sheets/psalm-084.png",
       "sheetPdf": "/sheets/psalm-084.pdf",
       "midiFile": "/midi/psalm-084.mid",
-      "mxlFile": "/mxl/psalm-084.mxl"
+      "mxlFile": "/mxl/psalm-084.mxl",
+      "bpm": 120
     },
     {
       "id": "psalm-90",
@@ -270,7 +276,8 @@
       "sheetImage": "/sheets/psalm-090.png",
       "sheetPdf": "/sheets/psalm-090.pdf",
       "midiFile": "/midi/psalm-090.mid",
-      "mxlFile": "/mxl/psalm-090.mxl"
+      "mxlFile": "/mxl/psalm-090.mxl",
+      "bpm": 110
     },
     {
       "id": "psalm-119-41",
@@ -304,7 +311,8 @@
       "sheetImage": "/sheets/psalm-119-41.png",
       "sheetPdf": "/sheets/psalm-119-41.pdf",
       "midiFile": "/midi/psalm-119-41.mid",
-      "mxlFile": "/mxl/psalm-119-41.mxl"
+      "mxlFile": "/mxl/psalm-119-41.mxl",
+      "bpm": 70
     },
     {
       "id": "psalm-119-65",
@@ -350,7 +358,8 @@
       "sheetImage": "/sheets/psalm-119-65.png",
       "sheetPdf": "/sheets/psalm-119-65.pdf",
       "midiFile": "/midi/psalm-119-65.mid",
-      "mxlFile": "/mxl/psalm-119-65.mxl"
+      "mxlFile": "/mxl/psalm-119-65.mxl",
+      "bpm": 110
     },
     {
       "id": "psalm-119-73",
@@ -384,7 +393,8 @@
       "sheetImage": "/sheets/psalm-119-73.png",
       "sheetPdf": "/sheets/psalm-119-73.pdf",
       "midiFile": "/midi/psalm-119-73.mid",
-      "mxlFile": "/mxl/psalm-119-73.mxl"
+      "mxlFile": "/mxl/psalm-119-73.mxl",
+      "bpm": 105
     },
     {
       "id": "psalm-119-129",
@@ -426,7 +436,8 @@
       "sheetImage": "/sheets/psalm-119-129.png",
       "sheetPdf": "/sheets/psalm-119-129.pdf",
       "midiFile": "/midi/psalm-119-129.mid",
-      "mxlFile": "/mxl/psalm-119-129.mxl"
+      "mxlFile": "/mxl/psalm-119-129.mxl",
+      "bpm": 110
     },
     {
       "id": "isaiah-40",
@@ -460,7 +471,8 @@
       "sheetImage": "/sheets/isaiah-040.png",
       "sheetPdf": "/sheets/isaiah-040.pdf",
       "midiFile": "/midi/isaiah-040.mid",
-      "mxlFile": "/mxl/isaiah-040.mxl"
+      "mxlFile": "/mxl/isaiah-040.mxl",
+      "bpm": 110
     }
   ]
 }
