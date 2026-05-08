@@ -6,13 +6,16 @@ import useRecent from "../hooks/useRecent";
 import useMemos from "../hooks/useMemos";
 import useMidiPlayer from "../hooks/useMidiPlayer";
 import useMetronomePlayer from "../hooks/useMetronomePlayer";
+import useMxlPlayer from "../hooks/useMxlPlayer";
 import LyricsView from "../components/LyricsView";
 import SheetView from "../components/SheetView";
 import MemoEditor from "../components/MemoEditor";
 import OsmdView from "../components/OsmdView";
+import OsmdViewMxl from "../components/OsmdViewMxl";
 import HomeIcon from "../components/icons/HomeIcon";
+import MiniPlayer from "../components/MiniPlayer";       // ⭐ 추가
 
-/* ── 아이콘 SVG ── */
+/* ── 아이콘 SVG (페이지 전용 — 미니플레이어 아이콘은 MiniPlayer로 이동) ── */
 const SettingsIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
     stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -52,47 +55,6 @@ const DownloadIcon = () => (
   </svg>
 );
 
-/* 미니 플레이어 아이콘 */
-const PlaySmall = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-    <polygon points="6,3 20,12 6,21" />
-  </svg>
-);
-const PauseSmall = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-    <rect x="5" y="3" width="4" height="18" /><rect x="15" y="3" width="4" height="18" />
-  </svg>
-);
-const StopSmall = () => (
-  <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-    <rect x="6" y="6" width="12" height="12" />
-  </svg>
-);
-
-/* 사운드 ON/OFF 아이콘 */
-const SoundOnIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-    <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
-    <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
-  </svg>
-);
-const SoundOffIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-    <line x1="23" y1="9" x2="17" y2="15" />
-    <line x1="17" y1="9" x2="23" y2="15" />
-  </svg>
-);
-
-function formatTime(seconds) {
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${String(s).padStart(2, "0")}`;
-}
-
 export default function SongDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -114,15 +76,16 @@ export default function SongDetailPage() {
   const hasMidi = Boolean(song?.midiFile);
   const hasMxl = Boolean(song?.mxlFile);
   const hasPractice = hasMxl;
-  const hasMetronome = hasMxl;  // 박자연습은 mxl만 있으면 가능
+  const hasMetronome = hasMxl;
+  const hasMxlPlayer = hasMxl;
 
-  // 반복 횟수: 가사 절수만큼 자동 반복 (전주는 mid에 포함되어 있으면 매 반복마다 들림)
   const totalLoops = song?.verses?.length || 1;
 
   const midi = useMidiPlayer(hasMidi ? song.midiFile : null, totalLoops);
   const metronome = useMetronomePlayer(hasMxl ? song.mxlFile : null, totalLoops);
+  const mxl = useMxlPlayer(hasMxlPlayer ? song.mxlFile : null, totalLoops, midi.tempo);
 
-  // 곡 변경 시: 현재 탭이 새 곡에서 유효한지 검사 (패턴 C — 조건부 유지)
+  // 곡 변경 시: 현재 탭이 새 곡에서 유효한지 검사
   useEffect(() => {
     const currentSong = songs.find((s) => s.id === id);
     if (!currentSong) return;
@@ -131,23 +94,28 @@ export default function SongDetailPage() {
     const songHasLyrics = currentSong.verses && currentSong.verses.length > 0;
 
     const tabValid =
-      activeTab === "sheet" ||                          // 악보는 모든 곡 보유
-      (activeTab === "practice" && songHasMxl) ||       // 연습은 mxl 필요
-      (activeTab === "metronome" && songHasMxl) ||      // 박자연습도 mxl 필요
-      (activeTab === "lyrics" && songHasLyrics);        // 가사는 verses 필요
+      activeTab === "sheet" ||
+      (activeTab === "practice" && songHasMxl) ||
+      (activeTab === "metronome" && songHasMxl) ||
+      (activeTab === "mxlplay" && songHasMxl) ||
+      (activeTab === "lyrics" && songHasLyrics);
 
     if (!tabValid) {
-      setActiveTab("sheet");  // 유효하지 않으면 악보로 폴백
+      setActiveTab("sheet");
     }
 
     if (midi.ready) midi.stop();
     if (metronome.ready) metronome.stop();
+    if (mxl.ready) mxl.stop();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, songs]);
 
+  // 탭 전환 시 비활성 플레이어 정지
   useEffect(() => {
-    if (activeTab !== "practice" && midi.playing) midi.stop();
+    if (activeTab !== "sheet" && activeTab !== "practice" && midi.playing) midi.stop();
+    if (activeTab !== "practice" && activeTab !== "sheet" && midi.playing) midi.stop();
     if (activeTab !== "metronome" && metronome.playing) metronome.stop();
+    if (activeTab !== "mxlplay" && mxl.playing) mxl.stop();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
@@ -199,6 +167,7 @@ export default function SongDetailPage() {
     { key: "sheet", label: "악보" },
     ...(hasPractice ? [{ key: "practice", label: "연습" }] : []),
     ...(hasMetronome ? [{ key: "metronome", label: "박자연습" }] : []),
+    ...(hasMxlPlayer ? [{ key: "mxlplay", label: "MXL재생" }] : []),
     { key: "lyrics", label: "가사" },
   ];
 
@@ -212,16 +181,6 @@ export default function SongDetailPage() {
   const tabUnderline = {
     position: "absolute", bottom: 0, left: 0, right: 0,
     height: "2px", backgroundColor: "white",
-  };
-
-  const handleProgressClick = (e) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    midi.seekTo(Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)));
-  };
-
-  const handleMetronomeProgressClick = (e) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    metronome.seekTo(Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)));
   };
 
   return (
@@ -285,19 +244,14 @@ export default function SongDetailPage() {
           {activeTab === "sheet" && <SheetView sheetImage={song.sheetImage} title={song.title} />}
           {activeTab === "lyrics" && <LyricsView verses={song.verses} />}
 
-          {/* 연습탭은 항상 마운트 (백그라운드 렌더링) — 활성 시에만 보이고 상호작용 가능 */}
           {hasPractice && (
-            <div
-              style={{
-                visibility: activeTab === "practice" ? "visible" : "hidden",
-                position: activeTab === "practice" ? "static" : "absolute",
-                top: 0,
-                left: 0,
-                right: 0,
-                pointerEvents: activeTab === "practice" ? "auto" : "none",
-                zIndex: activeTab === "practice" ? 1 : -1,
-              }}
-            >
+            <div style={{
+              visibility: activeTab === "practice" ? "visible" : "hidden",
+              position: activeTab === "practice" ? "static" : "absolute",
+              top: 0, left: 0, right: 0,
+              pointerEvents: activeTab === "practice" ? "auto" : "none",
+              zIndex: activeTab === "practice" ? 1 : -1,
+            }}>
               <OsmdView mxlUrl={song.mxlFile} originalTime={midi.originalTime}
                 melodyTimes={midi.melodyTimes} playing={midi.playing} scrollContainerRef={mainRef}
                 currentLoop={midi.currentLoop} midiBpm={midi.tempo}
@@ -305,23 +259,36 @@ export default function SongDetailPage() {
             </div>
           )}
 
-          {/* 박자연습탭도 항상 마운트 (백그라운드 렌더링) */}
           {hasMetronome && (
-            <div
-              style={{
-                visibility: activeTab === "metronome" ? "visible" : "hidden",
-                position: activeTab === "metronome" ? "static" : "absolute",
-                top: 0,
-                left: 0,
-                right: 0,
-                pointerEvents: activeTab === "metronome" ? "auto" : "none",
-                zIndex: activeTab === "metronome" ? 1 : -1,
-              }}
-            >
+            <div style={{
+              visibility: activeTab === "metronome" ? "visible" : "hidden",
+              position: activeTab === "metronome" ? "static" : "absolute",
+              top: 0, left: 0, right: 0,
+              pointerEvents: activeTab === "metronome" ? "auto" : "none",
+              zIndex: activeTab === "metronome" ? 1 : -1,
+            }}>
               <OsmdView mxlUrl={song.mxlFile} originalTime={metronome.originalTime}
                 melodyTimes={metronome.melodyTimes} playing={metronome.playing} scrollContainerRef={mainRef}
                 currentLoop={metronome.currentLoop} midiBpm={metronome.tempo}
                 midiOffset={metronome.melodyTimes?.[0] || 0} />
+            </div>
+          )}
+
+          {hasMxlPlayer && (
+            <div style={{
+              visibility: activeTab === "mxlplay" ? "visible" : "hidden",
+              position: activeTab === "mxlplay" ? "static" : "absolute",
+              top: 0, left: 0, right: 0,
+              pointerEvents: activeTab === "mxlplay" ? "auto" : "none",
+              zIndex: activeTab === "mxlplay" ? 1 : -1,
+            }}>
+              <OsmdViewMxl
+                mxlUrl={song.mxlFile}
+                currentStepIdx={mxl.currentStepIdx}
+                playing={mxl.playing}
+                scrollContainerRef={mainRef}
+                currentLoop={mxl.currentLoop}
+              />
             </div>
           )}
         </div>
@@ -338,125 +305,15 @@ export default function SongDetailPage() {
                 className={`shrink-0 p-1.5 rounded-full transition-colors ${prevSong ? "text-white/80 hover:text-white active:bg-white/10" : "text-white/20 cursor-not-allowed"}`}
                 title="이전 곡"><PrevIcon /></button>
 
-              {/* 중앙: 활성 탭에 따라 다른 미니 플레이어 표시 */}
-              {activeTab === "practice" && midi.ready ? (
-                /* 연습 탭 미니 플레이어 (mid 재생) */
-                <div className="flex-1 flex items-center gap-1.5 min-w-0">
-                  {/* 정지 (처음으로) */}
-                  <button onClick={midi.stop}
-                    className="shrink-0 w-6 h-6 flex items-center justify-center text-white/60 hover:text-white transition-colors"
-                    title="처음으로"><StopSmall /></button>
-
-                  {/* 재생 */}
-                  <button onClick={midi.play}
-                    disabled={midi.playing}
-                    className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition-colors
-                      ${midi.playing ? "bg-white/5 text-white/30" : "bg-white/15 text-white hover:bg-white/25 active:bg-white/35"}`}
-                    title="재생"><PlaySmall /></button>
-
-                  {/* 일시정지 */}
-                  <button onClick={midi.pause}
-                    disabled={!midi.playing}
-                    className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition-colors
-                      ${!midi.playing ? "bg-white/5 text-white/30" : "bg-white/15 text-white hover:bg-white/25 active:bg-white/35"}`}
-                    title="일시정지"><PauseSmall /></button>
-
-                  {/* 시간 */}
-                  <span className="shrink-0 text-[10px] text-white/50 w-7 text-right">
-                    {formatTime(midi.displayTime)}
-                  </span>
-
-                  {/* 프로그레스 바 */}
-                  <div onClick={handleProgressClick}
-                    className="flex-1 h-1.5 rounded-full cursor-pointer overflow-hidden min-w-[40px]"
-                    style={{ backgroundColor: "rgba(255,255,255,0.15)" }}>
-                    <div className="h-full rounded-full"
-                      style={{ width: `${Math.min(100, midi.progress * 100)}%`, backgroundColor: "rgba(255,255,255,0.7)", transition: "none" }} />
-                  </div>
-
-                  {/* 총 시간 */}
-                  <span className="shrink-0 text-[10px] text-white/50 w-7">
-                    {formatTime(midi.duration)}
-                  </span>
-
-                  {/* 절 카운트 (verses.length > 1인 경우만 표시) */}
-                  {midi.totalLoops > 1 && (
-                    <span className="shrink-0 text-[10px] text-white/60 ml-1" title={`${midi.currentLoop + 1}/${midi.totalLoops}절`}>
-                      {midi.currentLoop + 1}/{midi.totalLoops}
-                    </span>
-                  )}
-
-                  {/* 템포 */}
-                  <input type="range" min={60} max={200} step={1}
-                    value={midi.tempo}
-                    onChange={(e) => midi.changeTempo(Number(e.target.value))}
-                    className="shrink-0 h-1 accent-white opacity-50"
-                    style={{ width: "45px" }} title={`${midi.tempo} BPM`} />
-                  <span className="shrink-0 text-[9px] text-white/40 w-5">{midi.tempo}</span>
-                </div>
-              ) : activeTab === "metronome" && metronome.ready ? (
-                /* 박자연습 탭 미니 플레이어 (메트로놈 + cursor 동기화) */
-                <div className="flex-1 flex items-center gap-1.5 min-w-0">
-                  {/* 정지 (처음으로) */}
-                  <button onClick={metronome.stop}
-                    className="shrink-0 w-6 h-6 flex items-center justify-center text-white/60 hover:text-white transition-colors"
-                    title="처음으로"><StopSmall /></button>
-
-                  {/* 재생 */}
-                  <button onClick={metronome.play}
-                    disabled={metronome.playing}
-                    className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition-colors
-                      ${metronome.playing ? "bg-white/5 text-white/30" : "bg-white/15 text-white hover:bg-white/25 active:bg-white/35"}`}
-                    title="재생"><PlaySmall /></button>
-
-                  {/* 일시정지 */}
-                  <button onClick={metronome.pause}
-                    disabled={!metronome.playing}
-                    className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition-colors
-                      ${!metronome.playing ? "bg-white/5 text-white/30" : "bg-white/15 text-white hover:bg-white/25 active:bg-white/35"}`}
-                    title="일시정지"><PauseSmall /></button>
-
-                  {/* 사운드 ON/OFF */}
-                  <button onClick={metronome.toggleSound}
-                    className={`shrink-0 w-6 h-6 flex items-center justify-center transition-colors
-                      ${metronome.soundEnabled ? "text-white/80 hover:text-white" : "text-white/30 hover:text-white/50"}`}
-                    title={metronome.soundEnabled ? "메트로놈 사운드 끄기" : "메트로놈 사운드 켜기"}>
-                    {metronome.soundEnabled ? <SoundOnIcon /> : <SoundOffIcon />}
-                  </button>
-
-                  {/* 시간 */}
-                  <span className="shrink-0 text-[10px] text-white/50 w-7 text-right">
-                    {formatTime(metronome.displayTime)}
-                  </span>
-
-                  {/* 프로그레스 바 */}
-                  <div onClick={handleMetronomeProgressClick}
-                    className="flex-1 h-1.5 rounded-full cursor-pointer overflow-hidden min-w-[40px]"
-                    style={{ backgroundColor: "rgba(255,255,255,0.15)" }}>
-                    <div className="h-full rounded-full"
-                      style={{ width: `${Math.min(100, metronome.progress * 100)}%`, backgroundColor: "rgba(255,255,255,0.7)", transition: "none" }} />
-                  </div>
-
-                  {/* 총 시간 */}
-                  <span className="shrink-0 text-[10px] text-white/50 w-7">
-                    {formatTime(metronome.duration)}
-                  </span>
-
-                  {/* 절 카운트 (verses.length > 1인 경우만 표시) */}
-                  {metronome.totalLoops > 1 && (
-                    <span className="shrink-0 text-[10px] text-white/60 ml-1" title={`${metronome.currentLoop + 1}/${metronome.totalLoops}절`}>
-                      {metronome.currentLoop + 1}/{metronome.totalLoops}
-                    </span>
-                  )}
-
-                  {/* 템포 */}
-                  <input type="range" min={60} max={200} step={1}
-                    value={metronome.tempo}
-                    onChange={(e) => metronome.changeTempo(Number(e.target.value))}
-                    className="shrink-0 h-1 accent-white opacity-50"
-                    style={{ width: "45px" }} title={`${metronome.tempo} BPM`} />
-                  <span className="shrink-0 text-[9px] text-white/40 w-5">{metronome.tempo}</span>
-                </div>
+              {/* ⭐ 중앙: MiniPlayer 공통 컴포넌트 사용 */}
+              {activeTab === "sheet" && hasMidi ? (
+                <MiniPlayer player={midi} />
+              ) : activeTab === "practice" ? (
+                <MiniPlayer player={midi} />
+              ) : activeTab === "metronome" ? (
+                <MiniPlayer player={metronome} showSoundToggle />
+              ) : activeTab === "mxlplay" ? (
+                <MiniPlayer player={mxl} />
               ) : (
                 <span className="flex-1 text-center text-xs font-medium text-white/90">
                   {scriptureLabel}
