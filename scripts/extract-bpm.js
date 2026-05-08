@@ -1,5 +1,5 @@
 /**
- * extract-bpm.js
+ * extract-bpm.js (ES Module 버전)
  * MIDI 파일에서 BPM을 추출하여 songs.json의 각 곡에 bpm 필드 추가
  *
  * 사용법:
@@ -19,11 +19,20 @@
  *
  * 향후 (Phase 4):
  * - useMxlPlayer가 song.bpm을 직접 사용하면 useMidiPlayer 의존성 제거 가능
+ *
+ * 참고:
+ * - 프로젝트 package.json에 "type": "module" 설정 → ES Module 문법 사용
  */
 
-const fs = require('fs');
-const path = require('path');
-const { Midi } = require('@tonejs/midi');
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import pkg from '@tonejs/midi';
+const { Midi } = pkg;
+
+// __dirname 대체 (ES Module에는 없음)
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 const SONGS_JSON_PATH = path.join(PUBLIC_DIR, 'songs.json');
@@ -38,16 +47,31 @@ if (!fs.existsSync(SONGS_JSON_PATH)) {
 }
 
 const songsData = fs.readFileSync(SONGS_JSON_PATH, 'utf-8');
-let songs;
+let songsRoot;
 try {
-  songs = JSON.parse(songsData);
+  songsRoot = JSON.parse(songsData);
 } catch (e) {
   console.error(`❌ songs.json 파싱 실패: ${e.message}`);
   process.exit(1);
 }
 
-if (!Array.isArray(songs)) {
-  console.error('❌ songs.json이 배열이 아님');
+// songs.json 구조: { version, lastUpdated, songs: [...] }
+// 곡 배열을 찾아서 songs 변수에 할당
+let songs;
+if (Array.isArray(songsRoot)) {
+  // 배열 형식
+  songs = songsRoot;
+} else if (Array.isArray(songsRoot.songs)) {
+  // 객체 안에 songs 배열 형식 (현재 프로젝트 구조)
+  songs = songsRoot.songs;
+} else {
+  console.error('❌ songs.json에서 곡 배열을 찾을 수 없음');
+  console.error('   기대 형식: 배열 [...] 또는 { "songs": [...] }');
+  process.exit(1);
+}
+
+if (songs.length === 0) {
+  console.error('❌ 곡 배열이 비어있음');
   process.exit(1);
 }
 
@@ -134,7 +158,10 @@ console.log('');
 
 // 5. songs.json 저장
 if (successCount > 0) {
-  const newJson = JSON.stringify(songs, null, 2);
+  // 원래 구조(songsRoot) 보존하여 저장 (version, lastUpdated 등 유지)
+  // songs 배열은 이미 in-place로 수정되었음
+  const dataToSave = Array.isArray(songsRoot) ? songs : songsRoot;
+  const newJson = JSON.stringify(dataToSave, null, 2);
   fs.writeFileSync(SONGS_JSON_PATH, newJson, 'utf-8');
   console.log(`💾 songs.json 저장 완료\n`);
   console.log('다음 단계:');
