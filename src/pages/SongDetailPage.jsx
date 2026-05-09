@@ -88,6 +88,11 @@ export default function SongDetailPage() {
   const metronome = useMetronomePlayer(hasMxl ? song.mxlFile : null, totalLoops);
   const mxl = useMxlPlayer(hasMxlPlayer ? song.mxlFile : null, totalLoops, midi.tempo);
 
+  // OsmdView 스크롤 방지용: 활성 탭일 때만 scrollContainerRef 전달
+  const practiceScrollRef = activeTab === "practice" ? mainRef : { current: null };
+  const metronomeScrollRef = activeTab === "metronome" ? mainRef : { current: null };
+  const mxlScrollRef = activeTab === "mxlplay" ? mainRef : { current: null };
+
   // 곡 변경 시: 현재 탭이 새 곡에서 유효한지 검사
   useEffect(() => {
     const currentSong = songs.find((s) => s.id === id);
@@ -134,14 +139,13 @@ export default function SongDetailPage() {
 
   useEffect(() => { if (id) addRecent(id); }, [id, addRecent]);
 
-  // footer 높이 측정 (확장/접힘 시 자동 반영)
+  // footer 높이 측정
   useEffect(() => {
     const measure = () => {
       if (headerRef.current) setHeaderH(headerRef.current.offsetHeight);
       if (footerRef.current) setFooterH(footerRef.current.offsetHeight);
     };
     measure();
-    // 확장 애니메이션 후 재측정
     const timer = setTimeout(measure, 50);
     window.addEventListener("resize", measure);
     return () => {
@@ -192,7 +196,7 @@ export default function SongDetailPage() {
     height: "2px", backgroundColor: "white",
   };
 
-  // 현재 활성 플레이어 결정
+  // 현재 활성 플레이어
   const hasActivePlayer =
     (activeTab === "sheet" && hasMidi) ||
     activeTab === "practice" ||
@@ -274,8 +278,18 @@ export default function SongDetailPage() {
       }}>
         <div className="max-w-3xl mx-auto" style={{ position: "relative" }}>
           {activeTab === "sheet" && <SheetView sheetImage={song.sheetImage} title={song.title} />}
-          {activeTab === "lyrics" && <LyricsView verses={song.verses} />}
 
+          {/* ⭐ 가사: currentLoop, playing, scrollContainerRef 전달 */}
+          {activeTab === "lyrics" && (
+            <LyricsView
+              verses={song.verses}
+              currentLoop={midi.currentLoop}
+              playing={midi.playing}
+              scrollContainerRef={mainRef}
+            />
+          )}
+
+          {/* ⭐ OsmdView: 활성 탭일 때만 scrollContainerRef 전달 */}
           {hasPractice && (
             <div style={{
               visibility: activeTab === "practice" ? "visible" : "hidden",
@@ -285,7 +299,7 @@ export default function SongDetailPage() {
               zIndex: activeTab === "practice" ? 1 : -1,
             }}>
               <OsmdView mxlUrl={song.mxlFile} originalTime={midi.originalTime}
-                melodyTimes={midi.melodyTimes} playing={midi.playing} scrollContainerRef={mainRef}
+                melodyTimes={midi.melodyTimes} playing={midi.playing} scrollContainerRef={practiceScrollRef}
                 currentLoop={midi.currentLoop} midiBpm={midi.tempo}
                 midiOffset={midi.melodyTimes?.[0] || 0} />
             </div>
@@ -300,7 +314,7 @@ export default function SongDetailPage() {
               zIndex: activeTab === "metronome" ? 1 : -1,
             }}>
               <OsmdView mxlUrl={song.mxlFile} originalTime={metronome.originalTime}
-                melodyTimes={metronome.melodyTimes} playing={metronome.playing} scrollContainerRef={mainRef}
+                melodyTimes={metronome.melodyTimes} playing={metronome.playing} scrollContainerRef={metronomeScrollRef}
                 currentLoop={metronome.currentLoop} midiBpm={metronome.tempo}
                 midiOffset={metronome.melodyTimes?.[0] || 0} />
             </div>
@@ -318,7 +332,7 @@ export default function SongDetailPage() {
                 mxlUrl={song.mxlFile}
                 currentStepIdx={mxl.currentStepIdx}
                 playing={mxl.playing}
-                scrollContainerRef={mainRef}
+                scrollContainerRef={mxlScrollRef}
                 currentLoop={mxl.currentLoop}
               />
             </div>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useTheme } from "../contexts/ThemeContext";
 
 /* ── 설정 아이콘 ── */
@@ -7,6 +7,15 @@ const GearIcon = () => (
     stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <circle cx="12" cy="12" r="3" />
     <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+  </svg>
+);
+
+/* 스피커 아이콘 */
+const SpeakerIcon = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+    <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
   </svg>
 );
 
@@ -22,9 +31,43 @@ const FONT_FAMILIES = {
   pretendard: '"Pretendard", -apple-system, BlinkMacSystemFont, sans-serif',
 };
 
-export default function LyricsView({ verses }) {
+/**
+ * @param {Object} props
+ * @param {Array} props.verses - 가사 절 배열 [{number, text}, ...]
+ * @param {number} [props.currentLoop] - 현재 재생 중인 절 인덱스 (0부터)
+ * @param {boolean} [props.playing] - MIDI 재생 중 여부
+ * @param {React.RefObject} [props.scrollContainerRef] - 스크롤 컨테이너 ref
+ */
+export default function LyricsView({ verses, currentLoop = -1, playing = false, scrollContainerRef }) {
   const { font, setFont, fontSize, setFontSize } = useTheme();
   const [showPanel, setShowPanel] = useState(false);
+  const verseRefs = useRef([]);
+
+  // 절 ref 배열 초기화
+  useEffect(() => {
+    verseRefs.current = verseRefs.current.slice(0, verses.length);
+  }, [verses.length]);
+
+  // 현재 절로 자동 스크롤
+  useEffect(() => {
+    if (!playing || currentLoop < 0 || currentLoop >= verses.length) return;
+
+    const verseEl = verseRefs.current[currentLoop];
+    const scrollEl = scrollContainerRef?.current;
+    if (!verseEl || !scrollEl) return;
+
+    const scrollRect = scrollEl.getBoundingClientRect();
+    const verseRect = verseEl.getBoundingClientRect();
+
+    // 현재 절이 화면 밖에 있으면 스크롤
+    if (verseRect.top < scrollRect.top || verseRect.bottom > scrollRect.bottom) {
+      const offset = verseRect.top - scrollRect.top - scrollRect.height * 0.2;
+      scrollEl.scrollTo({
+        top: scrollEl.scrollTop + offset,
+        behavior: "smooth",
+      });
+    }
+  }, [currentLoop, playing, verses.length, scrollContainerRef]);
 
   return (
     <div className="flex flex-col gap-3 px-4 py-4">
@@ -91,25 +134,43 @@ export default function LyricsView({ verses }) {
       )}
 
       {/* 가사 */}
-      {verses.map((verse) => (
-        <div
-          key={verse.number}
-          className="bg-card rounded-lg border border-b-light shadow-sm p-4"
-        >
-          <span className="text-xs text-t-hint mb-2 block">
-            {verse.number}절
-          </span>
-          <p
-            className="text-t-primary leading-relaxed whitespace-pre-line"
+      {verses.map((verse, idx) => {
+        const isCurrentVerse = playing && currentLoop === idx;
+
+        return (
+          <div
+            key={verse.number}
+            ref={(el) => { verseRefs.current[idx] = el; }}
+            className="rounded-lg border shadow-sm p-4 transition-all duration-300"
             style={{
-              fontSize: `${fontSize}px`,
-              fontFamily: FONT_FAMILIES[font],
+              backgroundColor: isCurrentVerse ? "var(--accent, #374151)" : "var(--bg-card, white)",
+              borderColor: isCurrentVerse ? "var(--accent, #374151)" : "var(--border-light, #e5e7eb)",
+              transform: isCurrentVerse ? "scale(1.01)" : "scale(1)",
             }}
           >
-            {verse.text}
-          </p>
-        </div>
-      ))}
+            <span className="text-xs mb-2 block flex items-center gap-1.5"
+              style={{ color: isCurrentVerse ? "rgba(255,255,255,0.7)" : "var(--text-hint)" }}>
+              {verse.number}절
+              {isCurrentVerse && (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px]"
+                  style={{ backgroundColor: "rgba(255,255,255,0.2)", color: "rgba(255,255,255,0.9)" }}>
+                  <SpeakerIcon /> 재생 중
+                </span>
+              )}
+            </span>
+            <p
+              className="leading-relaxed whitespace-pre-line"
+              style={{
+                fontSize: `${fontSize}px`,
+                fontFamily: FONT_FAMILIES[font],
+                color: isCurrentVerse ? "white" : "var(--text-primary)",
+              }}
+            >
+              {verse.text}
+            </p>
+          </div>
+        );
+      })}
     </div>
   );
 }
