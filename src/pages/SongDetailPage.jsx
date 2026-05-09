@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import useSongs from "../hooks/useSongs";
 import useFavorites from "../hooks/useFavorites";
 import useRecent from "../hooks/useRecent";
@@ -15,7 +15,7 @@ import OsmdViewMxl from "../components/OsmdViewMxl";
 import HomeIcon from "../components/icons/HomeIcon";
 import MiniPlayer from "../components/MiniPlayer";
 
-/* ── 아이콘 SVG (페이지 전용 — 미니플레이어 아이콘은 MiniPlayer로 이동) ── */
+/* ── 아이콘 SVG (페이지 전용) ── */
 const SettingsIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
     stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -58,11 +58,14 @@ const DownloadIcon = () => (
 export default function SongDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { songs, loading } = useSongs();
   const { isFavorite, toggleFavorite } = useFavorites();
   const { addRecent } = useRecent();
   const { getMemo, saveMemo } = useMemos();
-  const [activeTab, setActiveTab] = useState("sheet");
+
+  // ⭐ 설정에서 돌아올 때 탭 복원
+  const [activeTab, setActiveTab] = useState(location.state?.tab || "sheet");
   const [immersive, setImmersive] = useState(false);
 
   const headerRef = useRef(null);
@@ -196,7 +199,7 @@ export default function SongDetailPage() {
             <h1 className="text-base font-bold text-t-primary truncate flex-1 min-w-0">
               {song.title}
             </h1>
-            <button onClick={() => navigate("/settings")}
+            <button onClick={() => navigate("/settings", { state: { from: `/song/${id}`, tab: activeTab } })}
               className="shrink-0 text-t-hint hover:text-t-primary transition-colors"
               title="설정">
               <SettingsIcon />

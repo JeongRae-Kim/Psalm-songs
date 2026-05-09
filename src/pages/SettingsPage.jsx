@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useTheme } from "../contexts/ThemeContext";
 import HomeIcon from "../components/icons/HomeIcon";
 
@@ -31,7 +31,18 @@ const FONTS = [
 
 export default function SettingsPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { theme, setTheme, darkMode, setDarkMode, font, setFont, fontSize, setFontSize } = useTheme();
+
+  const handleBack = () => {
+    if (location.state?.from) {
+      // 곡 페이지에서 왔으면 탭 정보 포함하여 복귀
+      navigate(location.state.from, { state: { tab: location.state.tab } });
+    } else {
+      // 그 외 (홈 등)에서 왔으면 브라우저 히스토리 복귀
+      navigate(-1);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-page">
@@ -39,7 +50,7 @@ export default function SettingsPage() {
       <header className="bg-header border-b border-b-light px-4 py-5">
         <div className="max-w-3xl mx-auto flex items-center gap-3">
           <button
-            onClick={() => navigate(-1)}
+            onClick={handleBack}
             className="text-t-hint hover:text-t-primary transition-colors"
             title="뒤로"
           >
