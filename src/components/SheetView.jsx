@@ -1,11 +1,30 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 
+/* ── 줌 아이콘 ── */
+const ZoomInIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+    <line x1="11" y1="8" x2="11" y2="14" /><line x1="8" y1="11" x2="14" y2="11" />
+  </svg>
+);
+const ZoomOutIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+    <line x1="8" y1="11" x2="14" y2="11" />
+  </svg>
+);
+
 export default function SheetView({ sheetImage, title }) {
   const [loaded, setLoaded] = useState(false);
   const [scale, setScale] = useState(1);
   const [translate, setTranslate] = useState({ x: 0, y: 0 });
   const containerRef = useRef(null);
   const imgRef = useRef(null);
+
+  // 줌 레벨 퍼센트 (버튼용)
+  const zoomPercent = Math.round(scale * 100);
 
   // 핀치 줌 상태
   const pinchRef = useRef({
@@ -197,6 +216,17 @@ export default function SheetView({ sheetImage, title }) {
 
   const isZoomed = scale > 1;
 
+  // ── 줌 버튼 핸들러 ──
+  const handleZoomButtonChange = useCallback((delta) => {
+    const newScale = Math.min(3, Math.max(1, scale + delta));
+    handleScaleChange(newScale);
+  }, [scale, handleScaleChange]);
+
+  const handleZoomReset = useCallback(() => {
+    setScale(1);
+    setTranslate({ x: 0, y: 0 });
+  }, []);
+
   return (
     <div
       style={{
@@ -204,6 +234,57 @@ export default function SheetView({ sheetImage, title }) {
         minHeight: "100%",
       }}
     >
+      {/* 줌 컨트롤 */}
+      {loaded && (
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "flex-end",
+          gap: "6px", padding: "6px 12px",
+          position: "sticky", top: 0, zIndex: 10,
+          backgroundColor: "rgba(250, 248, 244, 0.9)",
+          backdropFilter: "blur(4px)",
+        }}>
+          <button onClick={() => handleZoomButtonChange(-0.25)}
+            disabled={scale <= 1}
+            style={{
+              width: "32px", height: "32px", borderRadius: "8px",
+              border: "1px solid rgba(0,0,0,0.15)", backgroundColor: "white",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              cursor: scale <= 1 ? "not-allowed" : "pointer",
+              opacity: scale <= 1 ? 0.4 : 1,
+              transition: "opacity 0.15s",
+            }}
+            title="축소">
+            <ZoomOutIcon />
+          </button>
+
+          <button onClick={handleZoomReset}
+            style={{
+              minWidth: "48px", height: "32px", borderRadius: "8px",
+              border: "1px solid rgba(0,0,0,0.15)", backgroundColor: "white",
+              fontSize: "0.75rem", fontWeight: 600, color: "#374151",
+              cursor: "pointer", padding: "0 8px",
+              transition: "background-color 0.15s",
+            }}
+            title="줌 리셋 (100%)">
+            {zoomPercent}%
+          </button>
+
+          <button onClick={() => handleZoomButtonChange(0.25)}
+            disabled={scale >= 3}
+            style={{
+              width: "32px", height: "32px", borderRadius: "8px",
+              border: "1px solid rgba(0,0,0,0.15)", backgroundColor: "white",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              cursor: scale >= 3 ? "not-allowed" : "pointer",
+              opacity: scale >= 3 ? 0.4 : 1,
+              transition: "opacity 0.15s",
+            }}
+            title="확대">
+            <ZoomInIcon />
+          </button>
+        </div>
+      )}
+
       {/* 악보 */}
       <div
         ref={containerRef}
@@ -237,32 +318,6 @@ export default function SheetView({ sheetImage, title }) {
             willChange: "transform",
           }}
         />
-
-        {/* 줌 레벨 + 리셋 버튼 */}
-        {isZoomed && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setScale(1);
-              setTranslate({ x: 0, y: 0 });
-            }}
-            style={{
-              position: "absolute",
-              bottom: "16px",
-              right: "16px",
-              backgroundColor: "rgba(0,0,0,0.6)",
-              color: "white",
-              fontSize: "0.7rem",
-              padding: "6px 12px",
-              borderRadius: "16px",
-              border: "none",
-              cursor: "pointer",
-              zIndex: 10,
-            }}
-          >
-            {Math.round(scale * 100)}% ✕
-          </button>
-        )}
       </div>
 
       {/* 로딩 중 */}

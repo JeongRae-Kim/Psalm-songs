@@ -1,6 +1,14 @@
 import { useNavigate } from "react-router-dom";
 import { useTheme } from "../contexts/ThemeContext";
-import HomeIcon from "../components/icons/HomeIcon";
+
+/* ── 뒤로가기 아이콘 ── */
+const BackIcon = ({ size = 22 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="19" y1="12" x2="5" y2="12" />
+    <polyline points="12 19 5 12 12 5" />
+  </svg>
+);
 
 const THEMES = [
   { key: "minimal", label: "미니멀", desc: "깔끔한 흰색 톤" },
@@ -30,11 +38,11 @@ export default function SettingsPage() {
       <header className="bg-header border-b border-b-light px-4 py-5">
         <div className="max-w-3xl mx-auto flex items-center gap-3">
           <button
-            onClick={() => navigate("/")}
+            onClick={() => navigate(-1)}
             className="text-t-hint hover:text-t-primary transition-colors"
-            title="홈으로"
+            title="뒤로"
           >
-            <HomeIcon size={22} title="홈으로" />
+            <BackIcon size={22} />
           </button>
           <span className="w-px h-4 bg-b-default" />
           <h1 className="text-xl font-bold text-t-primary">설정</h1>
