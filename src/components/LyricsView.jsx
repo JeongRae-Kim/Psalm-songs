@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import { useTheme } from "../contexts/ThemeContext";
 
 /* ── 설정 아이콘 ── */
@@ -36,38 +36,10 @@ const FONT_FAMILIES = {
  * @param {Array} props.verses - 가사 절 배열 [{number, text}, ...]
  * @param {number} [props.currentLoop] - 현재 재생 중인 절 인덱스 (0부터)
  * @param {boolean} [props.playing] - MIDI 재생 중 여부
- * @param {React.RefObject} [props.scrollContainerRef] - 스크롤 컨테이너 ref
  */
-export default function LyricsView({ verses, currentLoop = -1, playing = false, scrollContainerRef }) {
+export default function LyricsView({ verses, currentLoop = -1, playing = false }) {
   const { font, setFont, fontSize, setFontSize } = useTheme();
   const [showPanel, setShowPanel] = useState(false);
-  const verseRefs = useRef([]);
-
-  // 절 ref 배열 초기화
-  useEffect(() => {
-    verseRefs.current = verseRefs.current.slice(0, verses.length);
-  }, [verses.length]);
-
-  // 현재 절로 자동 스크롤
-  useEffect(() => {
-    if (!playing || currentLoop < 0 || currentLoop >= verses.length) return;
-
-    const verseEl = verseRefs.current[currentLoop];
-    const scrollEl = scrollContainerRef?.current;
-    if (!verseEl || !scrollEl) return;
-
-    const scrollRect = scrollEl.getBoundingClientRect();
-    const verseRect = verseEl.getBoundingClientRect();
-
-    // 현재 절이 화면 밖에 있으면 스크롤
-    if (verseRect.top < scrollRect.top || verseRect.bottom > scrollRect.bottom) {
-      const offset = verseRect.top - scrollRect.top - scrollRect.height * 0.2;
-      scrollEl.scrollTo({
-        top: scrollEl.scrollTop + offset,
-        behavior: "smooth",
-      });
-    }
-  }, [currentLoop, playing, verses.length, scrollContainerRef]);
 
   return (
     <div className="flex flex-col gap-3 px-4 py-4">
@@ -140,7 +112,6 @@ export default function LyricsView({ verses, currentLoop = -1, playing = false, 
         return (
           <div
             key={verse.number}
-            ref={(el) => { verseRefs.current[idx] = el; }}
             className="rounded-lg border shadow-sm p-4 transition-all duration-300"
             style={{
               backgroundColor: isCurrentVerse ? "var(--accent, #374151)" : "var(--bg-card, white)",

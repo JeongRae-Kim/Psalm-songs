@@ -285,7 +285,6 @@ export default function SongDetailPage() {
               verses={song.verses}
               currentLoop={midi.currentLoop}
               playing={midi.playing}
-              scrollContainerRef={mainRef}
             />
           )}
 
