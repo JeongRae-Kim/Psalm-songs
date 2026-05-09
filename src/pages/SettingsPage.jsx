@@ -20,13 +20,6 @@ const FONTS = [
   { key: "pretendard", label: "Pretendard" },
 ];
 
-const FONT_SIZES = [
-  { key: "small", label: "작게" },
-  { key: "medium", label: "보통" },
-  { key: "large", label: "크게" },
-  { key: "xlarge", label: "아주 크게" },
-];
-
 export default function SettingsPage() {
   const navigate = useNavigate();
   const { theme, setTheme, darkMode, setDarkMode, font, setFont, fontSize, setFontSize } = useTheme();
@@ -122,26 +115,34 @@ export default function SettingsPage() {
           </div>
         </section>
 
-        {/* 글자 크기 */}
+        {/* 글자 크기 — 슬라이더 + 숫자 표시 */}
         <section>
           <h2 className="text-sm font-medium text-t-secondary mb-3">글자 크기</h2>
-          <div className="flex gap-2">
-            {FONT_SIZES.map((s) => (
-              <button
-                key={s.key}
-                onClick={() => setFontSize(s.key)}
-                className={`flex-1 text-center py-2.5 text-sm rounded-lg
-                  transition-colors border
-                  ${fontSize === s.key
-                    ? "bg-accent text-accent-text border-accent"
-                    : "bg-card text-t-primary border-b-light hover:border-b-default"
-                  }`}
-              >
-                {s.label}{fontSize === s.key && " ✓"}
-              </button>
-            ))}
+          <div className="bg-card rounded-lg border border-b-light p-4">
+            <div className="flex items-center gap-4">
+              <span className="text-xs text-t-hint shrink-0">작게</span>
+              <input
+                type="range"
+                min={12}
+                max={32}
+                step={1}
+                value={fontSize}
+                onChange={(e) => setFontSize(Number(e.target.value))}
+                className="flex-1 h-2 accent-[var(--accent)]"
+              />
+              <span className="text-xs text-t-hint shrink-0">크게</span>
+            </div>
+            <div className="text-center mt-3">
+              <span className="text-2xl font-bold text-t-primary">{fontSize}</span>
+              <span className="text-sm text-t-hint ml-1">px</span>
+            </div>
           </div>
-          <p className="text-xs text-t-hint mt-3">미리보기: 여호와는 나의 목자시니 내게 부족함이 없으리로다</p>
+          <div className="bg-card rounded-lg border border-b-light p-4 mt-3">
+            <p className="text-t-hint text-xs mb-2">미리보기</p>
+            <p className="text-t-primary leading-relaxed" style={{ fontSize: `${fontSize}px` }}>
+              여호와는 나의 목자시니 내게 부족함이 없으리로다
+            </p>
+          </div>
         </section>
 
       </main>

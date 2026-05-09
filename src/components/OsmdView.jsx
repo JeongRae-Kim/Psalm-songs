@@ -1,25 +1,25 @@
 /**
- * OsmdView.jsx v8.1
- * MXL → OSMD 악보 렌더링 + 커서 동기화 + 자동 스크롤
- *
- * ┌─────────────────────────────────────────────────────────────────┐
- * │ [커서 동기화 — v8.1: beat 기반 매핑 (안정화)]                    │
- * │                                                                 │
- * │ 1. OSMD 로드 시 각 커서 스텝의 beat 값 수집 (cursorTimesRef)     │
- * │ 2. MIDI에서 BPM 전달받음 (midiBpm prop)                         │
- * │ 3. MIDI 재생 시간(초) → beat 변환:                               │
- * │    adjustedSec = origSec - midiOffset                           │
- * │    beat = (adjustedSec / scale) × (BPM / 60) / 4               │
- * │    ※ OSMD realValue는 온음표=1.0 단위이므로 /4 필요             │
- * │ 4. scale = MIDI 실제 연주 길이 / OSMD 추정 길이                  │
- * │    - MIDI 연주 길이: melodyTimes 마지막 값 - 첫 값               │
- * │    - OSMD 추정 길이: lastBeat × 4 × 60 / BPM                   │
- * │    - melodyTimes 미로드 시 scale=1.0 (무보정)                    │
- * │ 5. cursorTimesRef에서 현재 beat 이하의 마지막 인덱스 = 커서 위치  │
- * └─────────────────────────────────────────────────────────────────┘
+ * OsmdView.jsx v8.2
+ * MXL → OSMD 악보 렌더링 + 커서 동기화 + 자동 스크롤 + 줌 버튼
  */
 import { useEffect, useRef, useState, useCallback } from "react";
 import { OpenSheetMusicDisplay } from "opensheetmusicdisplay";
+
+/* ── 줌 아이콘 ── */
+const ZoomInIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+    <line x1="11" y1="8" x2="11" y2="14" /><line x1="8" y1="11" x2="14" y2="11" />
+  </svg>
+);
+const ZoomOutIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+    <line x1="8" y1="11" x2="14" y2="11" />
+  </svg>
+);
 
 export default function OsmdView({
   mxlUrl,
@@ -37,9 +37,12 @@ export default function OsmdView({
   const totalStepsRef = useRef(0);
   const cursorTimesRef = useRef([]);
   const bpmRef = useRef(0);
+  const baseZoomRef = useRef(0.7);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [zoomLevel, setZoomLevel] = useState(100);
+  const [zooming, setZooming] = useState(false);
 
   // ── 커서 DOM 강제 표시 (height 1px 버그 수정) ──
   const forceCursorVisible = useCallback(() => {
@@ -95,6 +98,8 @@ export default function OsmdView({
         const padding = 16;
         const idealZoom = Math.max(0.4, Math.min(1.0, (containerWidth - padding) / baseWidth));
         osmd.zoom = idealZoom;
+        baseZoomRef.current = idealZoom;
+        setZoomLevel(100);
         console.log(`OSMD zoom: ${idealZoom.toFixed(2)} (container ${containerWidth}px)`);
 
         osmd.render();
@@ -112,8 +117,6 @@ export default function OsmdView({
         totalStepsRef.current = times.length;
         cursorTimesRef.current = times;
 
-        // BPM 수집: MIDI(prop) → OSMD → 기본값 120
-        // OSMD의 TempoInBPM은 대부분 0을 반환하므로 MIDI BPM을 최우선 사용
         const srcMeasures = osmd.sheet?.SourceMeasures;
         const osmdBpm = srcMeasures?.[0]?.TempoInBPM || 0;
         const detectedBpm = midiBpm > 0 ? midiBpm : (osmdBpm > 0 ? osmdBpm : 120);
@@ -149,7 +152,7 @@ export default function OsmdView({
     };
   }, [mxlUrl, forceCursorVisible]);
 
-  // ── midiBpm이 나중에 들어왔을 때 bpmRef 업데이트 (OSMD 재로드 없이) ──
+  // ── midiBpm이 나중에 들어왔을 때 bpmRef 업데이트 ──
   useEffect(() => {
     if (midiBpm > 0 && bpmRef.current !== midiBpm) {
       bpmRef.current = midiBpm;
@@ -162,6 +165,49 @@ export default function OsmdView({
       setTimeout(forceCursorVisible, 200);
     }
   }, [loading, forceCursorVisible]);
+
+  // ── 줌 변경 ──
+  const handleZoomChange = useCallback(async (delta) => {
+    const osmd = osmdRef.current;
+    if (!osmd || zooming) return;
+
+    const newLevel = Math.min(150, Math.max(50, zoomLevel + delta));
+    if (newLevel === zoomLevel) return;
+
+    setZooming(true);
+    setZoomLevel(newLevel);
+
+    const newZoom = baseZoomRef.current * (newLevel / 100);
+    osmd.zoom = newZoom;
+
+    // 현재 커서 위치 저장
+    const savedIdx = cursorIdxRef.current;
+
+    try {
+      osmd.render();
+
+      // 커서 위치 복원
+      osmd.cursor.reset();
+      osmd.cursor.show();
+      cursorIdxRef.current = 0;
+
+      for (let i = 0; i < savedIdx && !osmd.cursor.iterator.endReached; i++) {
+        osmd.cursor.next();
+        cursorIdxRef.current++;
+      }
+
+      forceCursorVisible();
+    } catch (e) {
+      console.warn("줌 변경 중 오류:", e);
+    }
+
+    setZooming(false);
+  }, [zoomLevel, zooming, forceCursorVisible]);
+
+  const handleZoomReset = useCallback(() => {
+    if (zoomLevel === 100) return;
+    handleZoomChange(100 - zoomLevel);
+  }, [zoomLevel, handleZoomChange]);
 
   // ── 스크롤 ──
   const scrollToCursor = useCallback(() => {
@@ -190,12 +236,10 @@ export default function OsmdView({
       const cTimes = cursorTimesRef.current;
       const bpm = bpmRef.current;
 
-      // ── beat 기반 매핑 (BPM + cursorTimes 유효할 때) ──
       if (bpm > 0 && cTimes.length > 0) {
         const lastBeat = cTimes[cTimes.length - 1] || 1;
         const osmdEstDuration = lastBeat * 4 * 60 / bpm;
 
-        // scale 계산: melodyTimes가 유효하면 사용, 아니면 무보정(1.0)
         const mTimes = melodyTimes;
         let scale = 1.0;
         if (mTimes && mTimes.length >= 2) {
@@ -210,7 +254,6 @@ export default function OsmdView({
         const adjustedSec = Math.max(0, origSec - midiOffset);
         const currentBeat = (adjustedSec / scale) * (bpm / 60) / 4;
 
-        // cursorTimes에서 currentBeat 이하인 마지막 인덱스 찾기
         let step = 0;
         for (let i = cTimes.length - 1; i >= 0; i--) {
           if (cTimes[i] <= currentBeat + 0.01) {
@@ -221,7 +264,6 @@ export default function OsmdView({
         return Math.min(step, totalStepsRef.current - 1);
       }
 
-      // ── fallback: BPM 없을 때 ──
       return 0;
     },
     [melodyTimes, midiOffset]
@@ -236,7 +278,6 @@ export default function OsmdView({
 
     const target = getCursorTarget(originalTime);
 
-    // 디버그: 1초 간격으로 현재 상태 출력
     const now = Date.now();
     if (now - lastDebugRef.current > 1000) {
       const bpm = bpmRef.current;
@@ -301,6 +342,57 @@ export default function OsmdView({
 
   return (
     <div style={{ backgroundColor: "#faf8f4", minHeight: "100%" }}>
+      {/* 줌 컨트롤 */}
+      {!loading && !error && (
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "flex-end",
+          gap: "6px", padding: "6px 12px",
+          position: "sticky", top: 0, zIndex: 10,
+          backgroundColor: "rgba(250, 248, 244, 0.9)",
+          backdropFilter: "blur(4px)",
+        }}>
+          <button onClick={() => handleZoomChange(-10)}
+            disabled={zoomLevel <= 50 || zooming}
+            style={{
+              width: "32px", height: "32px", borderRadius: "8px",
+              border: "1px solid rgba(0,0,0,0.15)", backgroundColor: "white",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              cursor: zoomLevel <= 50 || zooming ? "not-allowed" : "pointer",
+              opacity: zoomLevel <= 50 || zooming ? 0.4 : 1,
+              transition: "opacity 0.15s",
+            }}
+            title="축소">
+            <ZoomOutIcon />
+          </button>
+
+          <button onClick={handleZoomReset}
+            style={{
+              minWidth: "48px", height: "32px", borderRadius: "8px",
+              border: "1px solid rgba(0,0,0,0.15)", backgroundColor: "white",
+              fontSize: "0.75rem", fontWeight: 600, color: "#374151",
+              cursor: "pointer", padding: "0 8px",
+              transition: "background-color 0.15s",
+            }}
+            title="줌 리셋 (100%)">
+            {zooming ? "…" : `${zoomLevel}%`}
+          </button>
+
+          <button onClick={() => handleZoomChange(10)}
+            disabled={zoomLevel >= 150 || zooming}
+            style={{
+              width: "32px", height: "32px", borderRadius: "8px",
+              border: "1px solid rgba(0,0,0,0.15)", backgroundColor: "white",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              cursor: zoomLevel >= 150 || zooming ? "not-allowed" : "pointer",
+              opacity: zoomLevel >= 150 || zooming ? 0.4 : 1,
+              transition: "opacity 0.15s",
+            }}
+            title="확대">
+            <ZoomInIcon />
+          </button>
+        </div>
+      )}
+
       {loading && (
         <div className="flex items-center justify-center py-20">
           <p style={{ color: "rgba(0,0,0,0.3)", fontSize: "0.8rem" }}>

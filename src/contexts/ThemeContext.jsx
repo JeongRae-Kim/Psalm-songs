@@ -1,4 +1,3 @@
-
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { getItem, setItem } from "../utils/storage";
 
@@ -10,18 +9,17 @@ const FONT_FAMILIES = {
   pretendard: '"Pretendard", -apple-system, BlinkMacSystemFont, sans-serif',
 };
 
-const FONT_SIZES = {
-  small: "14px",
-  medium: "16px",
-  large: "18px",
-  xlarge: "20px",
-};
-
 export function ThemeProvider({ children }) {
   const [theme, setThemeState] = useState(() => getItem("theme", "minimal"));
   const [darkMode, setDarkModeState] = useState(() => getItem("darkMode", "auto"));
   const [font, setFontState] = useState(() => getItem("font", "gothic"));
-  const [fontSize, setFontSizeState] = useState(() => getItem("fontSize", "medium"));
+  const [fontSize, setFontSizeState] = useState(() => {
+    const saved = getItem("fontSize", "16");
+    const num = Number(saved);
+    // 기존 문자열 키("small" 등) → 숫자로 마이그레이션
+    if (isNaN(num)) return 16;
+    return Math.min(32, Math.max(12, num));
+  });
 
   const [systemDark, setSystemDark] = useState(
     () => window.matchMedia("(prefers-color-scheme: dark)").matches
@@ -44,7 +42,7 @@ export function ThemeProvider({ children }) {
 
   useEffect(() => {
     document.documentElement.style.setProperty("--font-family", FONT_FAMILIES[font]);
-    document.documentElement.style.setProperty("--font-size", FONT_SIZES[fontSize]);
+    document.documentElement.style.setProperty("--font-size", `${fontSize}px`);
   }, [font, fontSize]);
 
   const setTheme = useCallback((t) => {
@@ -63,8 +61,9 @@ export function ThemeProvider({ children }) {
   }, []);
 
   const setFontSize = useCallback((s) => {
-    setFontSizeState(s);
-    setItem("fontSize", s);
+    const clamped = Math.min(32, Math.max(12, Number(s)));
+    setFontSizeState(clamped);
+    setItem("fontSize", String(clamped));
   }, []);
 
   return (
