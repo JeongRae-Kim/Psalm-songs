@@ -81,7 +81,7 @@ export default function OsmdView({
           drawLyricist: true,
           drawPartNames: false,
           drawMeasureNumbers: false,
-          followCursor: true,
+          followCursor: false,
           pageFormat: "Endless",
           drawingParameters: "compact",
         });

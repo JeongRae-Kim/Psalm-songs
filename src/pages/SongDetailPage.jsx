@@ -297,9 +297,9 @@ export default function SongDetailPage() {
               pointerEvents: activeTab === "practice" ? "auto" : "none",
               zIndex: activeTab === "practice" ? 1 : -1,
             }}>
-              <OsmdView mxlUrl={song.mxlFile} originalTime={midi.originalTime}
+              <OsmdView mxlUrl={song.mxlFile} originalTime={activeTab === "practice" ? midi.originalTime : 0}
                 melodyTimes={midi.melodyTimes} playing={activeTab === "practice" && midi.playing} scrollContainerRef={practiceScrollRef}
-                currentLoop={midi.currentLoop} midiBpm={midi.tempo}
+                currentLoop={activeTab === "practice" ? midi.currentLoop : 0} midiBpm={midi.tempo}
                 midiOffset={midi.melodyTimes?.[0] || 0} />
             </div>
           )}
