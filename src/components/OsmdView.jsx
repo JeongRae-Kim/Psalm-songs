@@ -323,10 +323,10 @@ export default function OsmdView({
         osmdRef.current.cursor.show();
         cursorIdxRef.current = 0;
         forceCursorVisible();
-        scrollToCursor();
+        if (playing) scrollToCursor();
       } catch (e) { /* 무시 */ }
     }
-  }, [currentLoop, forceCursorVisible, scrollToCursor]);
+  }, [currentLoop, playing, forceCursorVisible, scrollToCursor]);
 
   // ── 정지 시 리셋 ──
   useEffect(() => {
