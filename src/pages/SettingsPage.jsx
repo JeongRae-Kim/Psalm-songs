@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { useTheme } from "../contexts/ThemeContext";
+import HomeIcon from "../components/icons/HomeIcon";
 
 /* ── 뒤로가기 아이콘 ── */
 const BackIcon = ({ size = 22 }) => (
@@ -43,6 +44,13 @@ export default function SettingsPage() {
             title="뒤로"
           >
             <BackIcon size={22} />
+          </button>
+          <button
+            onClick={() => navigate("/")}
+            className="text-t-hint hover:text-t-primary transition-colors"
+            title="홈으로"
+          >
+            <HomeIcon size={22} title="홈으로" />
           </button>
           <span className="w-px h-4 bg-b-default" />
           <h1 className="text-xl font-bold text-t-primary">설정</h1>
