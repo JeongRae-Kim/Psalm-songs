@@ -38,12 +38,12 @@ const ShrinkIcon = () => (
   </svg>
 );
 const PrevIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
     <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z" />
   </svg>
 );
 const NextIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
     <path d="M8.59 16.59L10 18l6-6-6-6-1.41 1.41L13.17 12z" />
   </svg>
 );
@@ -64,15 +64,15 @@ export default function SongDetailPage() {
   const { addRecent } = useRecent();
   const { getMemo, saveMemo } = useMemos();
 
-  // ⭐ 설정에서 돌아올 때 탭 복원
   const [activeTab, setActiveTab] = useState(location.state?.tab || "sheet");
   const [immersive, setImmersive] = useState(false);
+  const [footerExpanded, setFooterExpanded] = useState(false);
 
   const headerRef = useRef(null);
   const footerRef = useRef(null);
   const mainRef = useRef(null);
   const [headerH, setHeaderH] = useState(88);
-  const [footerH, setFooterH] = useState(96);
+  const [footerH, setFooterH] = useState(52);
 
   const song = songs.find((s) => s.id === id);
 
@@ -113,11 +113,12 @@ export default function SongDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, songs]);
 
-  // 탭 전환 시 비활성 플레이어 정지
+  // 탭 전환 시 비활성 플레이어 정지 + 확장 패널 닫기
   useEffect(() => {
     if (!["sheet", "practice", "lyrics"].includes(activeTab) && midi.playing) midi.stop();
     if (activeTab !== "metronome" && metronome.playing) metronome.stop();
     if (activeTab !== "mxlplay" && mxl.playing) mxl.stop();
+    setFooterExpanded(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
@@ -133,15 +134,21 @@ export default function SongDetailPage() {
 
   useEffect(() => { if (id) addRecent(id); }, [id, addRecent]);
 
+  // footer 높이 측정 (확장/접힘 시 자동 반영)
   useEffect(() => {
     const measure = () => {
       if (headerRef.current) setHeaderH(headerRef.current.offsetHeight);
       if (footerRef.current) setFooterH(footerRef.current.offsetHeight);
     };
     measure();
+    // 확장 애니메이션 후 재측정
+    const timer = setTimeout(measure, 50);
     window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
-  }, [immersive, activeTab]);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("resize", measure);
+    };
+  }, [immersive, activeTab, footerExpanded]);
 
   if (loading) {
     return (
@@ -184,6 +191,29 @@ export default function SongDetailPage() {
     position: "absolute", bottom: 0, left: 0, right: 0,
     height: "2px", backgroundColor: "white",
   };
+
+  // 현재 활성 플레이어 결정
+  const hasActivePlayer =
+    (activeTab === "sheet" && hasMidi) ||
+    activeTab === "practice" ||
+    activeTab === "metronome" ||
+    activeTab === "mxlplay" ||
+    (activeTab === "lyrics" && hasMidi);
+
+  const activePlayer =
+    (activeTab === "sheet" || activeTab === "lyrics") ? midi :
+    activeTab === "practice" ? midi :
+    activeTab === "metronome" ? metronome :
+    activeTab === "mxlplay" ? mxl : null;
+
+  const activeShowSoundToggle = activeTab === "metronome";
+
+  // 메모 슬롯
+  const memoNode = (
+    <div className="bg-card rounded-lg">
+      <MemoEditor value={getMemo(song.id)} onSave={(text) => saveMemo(song.id, text)} />
+    </div>
+  );
 
   return (
     <div className="bg-page" style={{ overscrollBehavior: "none" }}>
@@ -296,51 +326,47 @@ export default function SongDetailPage() {
         </div>
       </main>
 
-      {/* ━━ 하단 ━━ */}
+      {/* ━━ 하단 footer ━━ */}
       {!immersive && (
         <div ref={footerRef} style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 50 }}>
           <div style={{ backgroundColor: "var(--accent, #374151)" }}>
-            <div className="max-w-3xl mx-auto flex items-center px-3 py-2 gap-1">
-              {/* ◀ 이전 곡 */}
-              <button onClick={() => prevSong && navigate(`/song/${prevSong.id}`)}
-                disabled={!prevSong}
-                className={`shrink-0 p-1.5 rounded-full transition-colors ${prevSong ? "text-white/80 hover:text-white active:bg-white/10" : "text-white/20 cursor-not-allowed"}`}
-                title="이전 곡"><PrevIcon /></button>
-
-              {/* ⭐ 중앙: MiniPlayer 공통 컴포넌트 사용 */}
-              {activeTab === "sheet" && hasMidi ? (
-                <MiniPlayer player={midi} />
-              ) : activeTab === "practice" ? (
-                <MiniPlayer player={midi} />
-              ) : activeTab === "metronome" ? (
-                <MiniPlayer player={metronome} showSoundToggle />
-              ) : activeTab === "mxlplay" ? (
-                <MiniPlayer player={mxl} />
-              ) : activeTab === "lyrics" && hasMidi ? (
-                <MiniPlayer player={midi} />
-              ) : (
-                <span className="flex-1 text-center text-xs font-medium text-white/90">
-                  {scriptureLabel}
-                </span>
-              )}
-
-              {/* ▶ 다음 곡 */}
-              <button onClick={() => nextSong && navigate(`/song/${nextSong.id}`)}
-                disabled={!nextSong}
-                className={`shrink-0 ml-2 p-1.5 rounded-full transition-colors ${nextSong ? "text-white/80 hover:text-white active:bg-white/10" : "text-white/20 cursor-not-allowed"}`}
-                title="다음 곡"><NextIcon /></button>
-
-              {/* 다운로드 */}
-              <a href={song.sheetPdf} download
-                className="shrink-0 ml-2 p-1.5 rounded-full text-white/60 hover:text-white active:bg-white/10 transition-colors"
-                title="PDF 다운로드"><DownloadIcon /></a>
-            </div>
-          </div>
-
-          {/* 메모 */}
-          <div className="bg-card border-t border-b-light">
             <div className="max-w-3xl mx-auto px-3 py-2">
-              <MemoEditor value={getMemo(song.id)} onSave={(text) => saveMemo(song.id, text)} />
+              <div className="flex items-center gap-2">
+                {/* ◀ 이전 곡 */}
+                <button onClick={() => prevSong && navigate(`/song/${prevSong.id}`)}
+                  disabled={!prevSong}
+                  style={{ width: "36px", height: "36px", minWidth: "36px" }}
+                  className={`shrink-0 rounded-full flex items-center justify-center transition-colors ${prevSong ? "text-white/80 hover:text-white active:bg-white/10" : "text-white/20 cursor-not-allowed"}`}
+                  title="이전 곡"><PrevIcon /></button>
+
+                {/* 중앙: MiniPlayer 또는 성경 구절 */}
+                {hasActivePlayer && activePlayer ? (
+                  <MiniPlayer
+                    player={activePlayer}
+                    showSoundToggle={activeShowSoundToggle}
+                    expanded={footerExpanded}
+                    onToggleExpand={() => setFooterExpanded(!footerExpanded)}
+                    memoSlot={footerExpanded ? memoNode : null}
+                  />
+                ) : (
+                  <span className="flex-1 text-center text-xs font-medium text-white/90">
+                    {scriptureLabel}
+                  </span>
+                )}
+
+                {/* ▶ 다음 곡 */}
+                <button onClick={() => nextSong && navigate(`/song/${nextSong.id}`)}
+                  disabled={!nextSong}
+                  style={{ width: "36px", height: "36px", minWidth: "36px" }}
+                  className={`shrink-0 rounded-full flex items-center justify-center transition-colors ${nextSong ? "text-white/80 hover:text-white active:bg-white/10" : "text-white/20 cursor-not-allowed"}`}
+                  title="다음 곡"><NextIcon /></button>
+
+                {/* 다운로드 */}
+                <a href={song.sheetPdf} download
+                  style={{ width: "36px", height: "36px", minWidth: "36px" }}
+                  className="shrink-0 rounded-full flex items-center justify-center text-white/60 hover:text-white active:bg-white/10 transition-colors"
+                  title="PDF 다운로드"><DownloadIcon /></a>
+              </div>
             </div>
           </div>
         </div>
