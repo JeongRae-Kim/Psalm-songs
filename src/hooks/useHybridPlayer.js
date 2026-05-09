@@ -1,5 +1,5 @@
 /**
- * useHybridPlayer.js v0.1 (옵션 B PoC)
+ * useHybridPlayer.js v0.2 (옵션 B PoC)
  *
  * 옵션 B: cursor는 MXL 단일 원천에서 파생, 소리는 MIDI 파일 재생
  *
@@ -17,6 +17,10 @@
  *
  * 변경 이력:
  *   v0.1 (2026-05-09) — 초기 작성
+ *   v0.2 (2026-05-09) — 매핑 분모를 lastBeat(마지막 음표 시작) → lastBeatEnd(마지막 음표 끝)로 보정.
+ *                       v0.1에서는 마지막 음표가 totalSec에 매핑되어 시각적 체류 시간이 0이었음.
+ *                       v0.2부터는 마지막 음표가 본인 duration 만큼 표시되며, rit./fermata 곡에서는
+ *                       cursor가 마지막 음표에 일찍 도달해 fermata 동안 정지함(주석상 의도된 동작).
  */
 import { useEffect, useState, useRef, useMemo } from "react";
 import { OpenSheetMusicDisplay } from "opensheetmusicdisplay";
@@ -38,7 +42,9 @@ export default function useHybridPlayer(mxlUrl, midiUrl, totalLoops = 1) {
   const [totalSteps, setTotalSteps] = useState(0);
   const [mxlReady, setMxlReady] = useState(false);
   const [mxlError, setMxlError] = useState(null);
-  const lastBeatRef = useRef(0);  // notesData의 마지막 timeBeat (cursor 매핑용)
+  // v0.2: 마지막 음표의 *끝* timeBeat (= timeBeat + durationBeat). 매핑 분모로 사용.
+  // v0.1에서는 마지막 음표 시작 timeBeat을 사용하여 마지막 음표가 totalSec에 매핑되는 문제가 있었음.
+  const lastBeatEndRef = useRef(0);
 
   useEffect(() => {
     if (!mxlUrl) {
@@ -141,14 +147,26 @@ export default function useHybridPlayer(mxlUrl, midiUrl, totalLoops = 1) {
 
         if (cancelled) return;
 
-        const lastBeat = data.length > 0 ? data[data.length - 1].timeBeat : 0;
-        lastBeatRef.current = lastBeat;
+        // v0.2: 매핑 분모로 마지막 음표의 *끝* timeBeat을 사용.
+        //  - lastBeatStart = 마지막 음표 시작 (v0.1 기준)
+        //  - lastBeatEnd   = 마지막 음표 시작 + duration (v0.2 기준)
+        //  - lastBeatStart을 분모로 쓰면 마지막 음표가 totalSec에 매핑되어 체류 시간이 0이 됨.
+        //  - lastBeatEnd를 분모로 쓰면 마지막 음표 시작은 totalSec 이전에 매핑되고,
+        //    마지막 음표 시작~끝 구간이 cursor 정지 구간이 됨(rit./fermata가 들리는 동안).
+        const lastNote = data.length > 0 ? data[data.length - 1] : null;
+        const lastBeatStart = lastNote ? lastNote.timeBeat : 0;
+        const lastBeatEnd = lastNote
+          ? lastNote.timeBeat + (lastNote.durationBeat || 0)
+          : 0;
+        lastBeatEndRef.current = lastBeatEnd;
         setNotesData(data);
         setTotalSteps(stepIdx);
         setMxlReady(true);
 
         console.log(
-          `[Hybrid] MXL 음표=${data.length}, totalSteps=${stepIdx}, lastBeat=${lastBeat.toFixed(2)}`
+          `[Hybrid] MXL 음표=${data.length}, totalSteps=${stepIdx}, ` +
+          `lastBeatStart=${lastBeatStart.toFixed(2)}, ` +
+          `lastBeatEnd=${lastBeatEnd.toFixed(2)} (매핑 분모)`
         );
       })
       .catch((e) => {
@@ -179,15 +197,16 @@ export default function useHybridPlayer(mxlUrl, midiUrl, totalLoops = 1) {
   // ─────────────────────────────────────────────────────────
   // 3. cursor 매핑: midi.currentTime → cursor stepIdx
   //
-  //    매핑 방식: 평균 BPM 기준 비례 매핑
-  //      cursor가 t초 시점에 있을 때, 해당 t초에 진행된 음표 비율로 cursor 위치 결정
-  //      ratio = midi.originalDuration / lastBeat  (1 beat당 평균 초)
+  //    매핑 방식 (v0.2): 평균 BPM 기준 비례 매핑
+  //      ratio = totalSec / lastBeatEnd  (1 beat당 평균 초, 마지막 음표 끝 기준)
   //      noteSec_i = notesData[i].timeBeat × ratio
   //      target = max stepIdx where noteSec_i <= midi.currentTime
   //
-  //    rit./fermata 구간에서는 다음과 같이 동작:
+  //    rit./fermata 구간 동작:
   //      - 소리(MIDI)는 점점 느려져 마지막 음표에서 길게 늘어짐
   //      - cursor는 평균 BPM 기준이라 rit. 구간보다 빨리 마지막 음표 도달
+  //      - 마지막 음표 시작은 lastBeatStart × totalSec/lastBeatEnd (= totalSec 이전) 시점에 도달
+  //      - 마지막 음표 시작~MIDI 종료 사이 동안 cursor가 마지막 음표에 정지
   //      - 결과: cursor가 마지막 음표에서 정지한 채 fermata가 들리는 자연스러운 마무리
   //
   //    절 전환 시:
@@ -198,16 +217,16 @@ export default function useHybridPlayer(mxlUrl, midiUrl, totalLoops = 1) {
   const currentStepIdx = useMemo(() => {
     if (notesData.length === 0) return 0;
     if (midi.originalDuration <= 0) return 0;
-    const lastBeat = lastBeatRef.current;
-    if (lastBeat <= 0) return 0;
+    const lastBeatEnd = lastBeatEndRef.current;
+    if (lastBeatEnd <= 0) return 0;
 
     const totalSec = midi.originalDuration;
     const elapsed = midi.currentTime;  // 절 내 시간 (원본 BPM 기준 초)
 
-    // 평균 BPM 기준 beat → time 비례 매핑
+    // 평균 BPM 기준 beat → time 비례 매핑 (v0.2: lastBeatEnd 기준)
     let target = 0;
     for (let i = notesData.length - 1; i >= 0; i--) {
-      const noteSec = notesData[i].timeBeat * totalSec / lastBeat;
+      const noteSec = notesData[i].timeBeat * totalSec / lastBeatEnd;
       if (noteSec <= elapsed + 0.01) {
         target = notesData[i].stepIdx;
         break;
@@ -243,7 +262,7 @@ export default function useHybridPlayer(mxlUrl, midiUrl, totalLoops = 1) {
       console.log(
         `[Hybrid] cursor 마지막 음표 도달 시점: ${midi.currentTime.toFixed(3)}s, ` +
         `MIDI 남은 시간: ${remaining.toFixed(3)}s ` +
-        `(이 시간이 옵션 B의 절 끝 어긋남)`
+        `(이 시간이 옵션 B의 절 끝 어긋남 = 마지막 음표 체류 시간)`
       );
     }
     if (currentStepIdx === 0) {
