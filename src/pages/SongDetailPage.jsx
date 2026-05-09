@@ -7,6 +7,7 @@ import useMemos from "../hooks/useMemos";
 import useMidiPlayer from "../hooks/useMidiPlayer";
 import useMetronomePlayer from "../hooks/useMetronomePlayer";
 import useMxlPlayer from "../hooks/useMxlPlayer";
+import useHybridPlayer from "../hooks/useHybridPlayer";
 import LyricsView from "../components/LyricsView";
 import SheetView from "../components/SheetView";
 import MemoEditor from "../components/MemoEditor";
@@ -81,17 +82,25 @@ export default function SongDetailPage() {
   const hasPractice = hasMxl;
   const hasMetronome = hasMxl;
   const hasMxlPlayer = hasMxl;
+  const hasHybrid = hasMxl && hasMidi;  // ⭐ hybrid 탭 (옵션 B PoC) — mxl + midi 둘 다 필요
 
   const totalLoops = song?.verses?.length || 1;
 
   const midi = useMidiPlayer(hasMidi ? song.midiFile : null, totalLoops);
   const metronome = useMetronomePlayer(hasMxl ? song.mxlFile : null, totalLoops);
   const mxl = useMxlPlayer(hasMxlPlayer ? song.mxlFile : null, totalLoops, midi.tempo);
+  // ⭐ hybrid 탭 (옵션 B PoC): cursor=MXL, 소리=MIDI 분리 구조
+  const hybrid = useHybridPlayer(
+    hasHybrid ? song.mxlFile : null,
+    hasHybrid ? song.midiFile : null,
+    totalLoops
+  );
 
   // OsmdView 스크롤 방지용: 활성 탭일 때만 scrollContainerRef 전달
   const practiceScrollRef = activeTab === "practice" ? mainRef : { current: null };
   const metronomeScrollRef = activeTab === "metronome" ? mainRef : { current: null };
   const mxlScrollRef = activeTab === "mxlplay" ? mainRef : { current: null };
+  const hybridScrollRef = activeTab === "hybrid" ? mainRef : { current: null };  // ⭐ hybrid 탭 스크롤
 
   // 곡 변경 시: 현재 탭이 새 곡에서 유효한지 검사
   useEffect(() => {
@@ -99,6 +108,7 @@ export default function SongDetailPage() {
     if (!currentSong) return;
 
     const songHasMxl = Boolean(currentSong.mxlFile);
+    const songHasMidi = Boolean(currentSong.midiFile);  // ⭐ hybrid 탭 검사용
     const songHasLyrics = currentSong.verses && currentSong.verses.length > 0;
 
     const tabValid =
@@ -106,6 +116,7 @@ export default function SongDetailPage() {
       (activeTab === "practice" && songHasMxl) ||
       (activeTab === "metronome" && songHasMxl) ||
       (activeTab === "mxlplay" && songHasMxl) ||
+      (activeTab === "hybrid" && songHasMxl && songHasMidi) ||  // ⭐ hybrid는 mxl+midi 모두 필요
       (activeTab === "lyrics" && songHasLyrics);
 
     if (!tabValid) {
@@ -115,6 +126,7 @@ export default function SongDetailPage() {
     if (midi.ready) midi.stop();
     if (metronome.ready) metronome.stop();
     if (mxl.ready) mxl.stop();
+    if (hybrid.ready) hybrid.stop();  // ⭐ hybrid 탭 stop 추가
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, songs]);
 
@@ -123,6 +135,7 @@ export default function SongDetailPage() {
     if (!["sheet", "practice", "lyrics"].includes(activeTab) && midi.playing) midi.stop();
     if (activeTab !== "metronome" && metronome.playing) metronome.stop();
     if (activeTab !== "mxlplay" && mxl.playing) mxl.stop();
+    if (activeTab !== "hybrid" && hybrid.playing) hybrid.stop();  // ⭐ hybrid 탭 stop 추가
     setFooterExpanded(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
@@ -181,6 +194,7 @@ export default function SongDetailPage() {
     ...(hasPractice ? [{ key: "practice", label: "연습" }] : []),
     ...(hasMetronome ? [{ key: "metronome", label: "박자연습" }] : []),
     ...(hasMxlPlayer ? [{ key: "mxlplay", label: "MXL재생" }] : []),
+    ...(hasHybrid ? [{ key: "hybrid", label: "hybrid" }] : []),  // ⭐ hybrid 탭 (옵션 B PoC)
     { key: "lyrics", label: "가사" },
   ];
 
@@ -202,13 +216,15 @@ export default function SongDetailPage() {
     activeTab === "practice" ||
     activeTab === "metronome" ||
     activeTab === "mxlplay" ||
+    activeTab === "hybrid" ||  // ⭐ hybrid 탭 (옵션 B PoC)
     (activeTab === "lyrics" && hasMidi);
 
   const activePlayer =
     (activeTab === "sheet" || activeTab === "lyrics") ? midi :
     activeTab === "practice" ? midi :
     activeTab === "metronome" ? metronome :
-    activeTab === "mxlplay" ? mxl : null;
+    activeTab === "mxlplay" ? mxl :
+    activeTab === "hybrid" ? hybrid : null;  // ⭐ hybrid 탭은 hybrid hook 사용
 
   const activeShowSoundToggle = activeTab === "metronome";
 
@@ -333,6 +349,25 @@ export default function SongDetailPage() {
                 playing={activeTab === "mxlplay" && mxl.playing}
                 scrollContainerRef={mxlScrollRef}
                 currentLoop={mxl.currentLoop}
+              />
+            </div>
+          )}
+
+          {/* ⭐ hybrid 탭 (옵션 B PoC) — cursor=MXL, 소리=MIDI */}
+          {hasHybrid && (
+            <div style={{
+              visibility: activeTab === "hybrid" ? "visible" : "hidden",
+              position: activeTab === "hybrid" ? "static" : "absolute",
+              top: 0, left: 0, right: 0,
+              pointerEvents: activeTab === "hybrid" ? "auto" : "none",
+              zIndex: activeTab === "hybrid" ? 1 : -1,
+            }}>
+              <OsmdViewMxl
+                mxlUrl={song.mxlFile}
+                currentStepIdx={hybrid.currentStepIdx}
+                playing={activeTab === "hybrid" && hybrid.playing}
+                scrollContainerRef={hybridScrollRef}
+                currentLoop={hybrid.currentLoop}
               />
             </div>
           )}
