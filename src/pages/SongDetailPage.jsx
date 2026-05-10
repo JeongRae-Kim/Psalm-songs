@@ -5,6 +5,7 @@ import useFavorites from "../hooks/useFavorites";
 import useRecent from "../hooks/useRecent";
 import useMemos from "../hooks/useMemos";
 import useAccompanistPlayer from "../hooks/useAccompanistPlayer";
+import useMidiPlayer from "../hooks/useMidiPlayer";
 import LyricsView from "../components/LyricsView";
 import SheetView from "../components/SheetView";
 import MemoEditor from "../components/MemoEditor";
@@ -77,6 +78,7 @@ export default function SongDetailPage() {
 
   const totalLoops = song?.verses?.length || 1;
 
+  const midi = useMidiPlayer(hasMidi ? song.midiFile : null, totalLoops);
   const accompanist = useAccompanistPlayer(
     hasAccompanist ? song.midiFile : null,
     totalLoops,
@@ -102,12 +104,17 @@ export default function SongDetailPage() {
     }
 
     if (accompanist.ready) accompanist.stop();
+    if (midi.ready) midi.stop();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, songs]);
 
   // 탭 전환 시 비활성 플레이어 정지 + 확장 패널 닫기
   useEffect(() => {
-    if (activeTab !== "accompanist" && activeTab !== "sheet" && activeTab !== "lyrics") {
+    if (activeTab === "accompanist") {
+      // 반주기 탭으로 오면 midi 정지
+      if (midi.playing) midi.stop();
+    } else {
+      // 다른 탭으로 가면 accompanist 정지
       if (accompanist.playing) accompanist.stop();
     }
     setFooterExpanded(false);
@@ -181,10 +188,12 @@ export default function SongDetailPage() {
     height: "2px", backgroundColor: "white",
   };
 
-  // 현재 활성 플레이어 — 반주기 플레이어는 sheet/lyrics/accompanist 모든 탭에서 사용
-  const hasActivePlayer = hasAccompanist;
+  // 현재 활성 플레이어 — 악보/가사는 midi, 반주기는 accompanist
+  const hasActivePlayer = hasMidi;
 
-  const activePlayer = hasAccompanist ? accompanist : null;
+  const activePlayer =
+    activeTab === "accompanist" ? accompanist :
+    hasMidi ? midi : null;
 
   const activeShowSoundToggle = false;
 
@@ -255,12 +264,12 @@ export default function SongDetailPage() {
         <div className="max-w-3xl mx-auto" style={{ position: "relative" }}>
           {activeTab === "sheet" && <SheetView sheetImage={song.sheetImage} title={song.title} />}
 
-          {/* 가사: currentLoop, playing 전달 */}
+          {/* 가사: midi 플레이어의 currentLoop, playing 전달 */}
           {activeTab === "lyrics" && (
             <LyricsView
               verses={song.verses}
-              currentLoop={accompanist.currentLoop}
-              playing={accompanist.playing}
+              currentLoop={midi.currentLoop}
+              playing={midi.playing}
             />
           )}
 
