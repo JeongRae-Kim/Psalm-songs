@@ -4,15 +4,10 @@ import useSongs from "../hooks/useSongs";
 import useFavorites from "../hooks/useFavorites";
 import useRecent from "../hooks/useRecent";
 import useMemos from "../hooks/useMemos";
-import useMidiPlayer from "../hooks/useMidiPlayer";
-import useMetronomePlayer from "../hooks/useMetronomePlayer";
-import useMxlPlayer from "../hooks/useMxlPlayer";
-import useHybridPlayer from "../hooks/useHybridPlayer";
+import useAccompanistPlayer from "../hooks/useAccompanistPlayer";
 import LyricsView from "../components/LyricsView";
 import SheetView from "../components/SheetView";
 import MemoEditor from "../components/MemoEditor";
-import OsmdView from "../components/OsmdView";
-import OsmdViewMxl from "../components/OsmdViewMxl";
 import HomeIcon from "../components/icons/HomeIcon";
 import MiniPlayer from "../components/MiniPlayer";
 
@@ -78,64 +73,43 @@ export default function SongDetailPage() {
   const song = songs.find((s) => s.id === id);
 
   const hasMidi = Boolean(song?.midiFile);
-  const hasMxl = Boolean(song?.mxlFile);
-  const hasPractice = hasMxl;
-  const hasMetronome = hasMxl;
-  const hasMxlPlayer = hasMxl;
-  const hasHybrid = hasMxl && hasMidi;  // ⭐ hybrid 탭 (옵션 B PoC) — mxl + midi 둘 다 필요
+  const hasAccompanist = hasMidi;  // 반주기: MIDI만 있으면 됨
 
   const totalLoops = song?.verses?.length || 1;
 
-  const midi = useMidiPlayer(hasMidi ? song.midiFile : null, totalLoops);
-  const metronome = useMetronomePlayer(hasMxl ? song.mxlFile : null, totalLoops);
-  const mxl = useMxlPlayer(hasMxlPlayer ? song.mxlFile : null, totalLoops, midi.tempo);
-  // ⭐ hybrid 탭 (옵션 B PoC): cursor=MXL, 소리=MIDI 분리 구조
-  const hybrid = useHybridPlayer(
-    hasHybrid ? song.mxlFile : null,
-    hasHybrid ? song.midiFile : null,
-    totalLoops
+  const accompanist = useAccompanistPlayer(
+    hasAccompanist ? song.midiFile : null,
+    totalLoops,
+    song?.introMeasures || 4,
+    song?.hasAmen || false
   );
-
-  // OsmdView 스크롤 방지용: 활성 탭일 때만 scrollContainerRef 전달
-  const practiceScrollRef = activeTab === "practice" ? mainRef : { current: null };
-  const metronomeScrollRef = activeTab === "metronome" ? mainRef : { current: null };
-  const mxlScrollRef = activeTab === "mxlplay" ? mainRef : { current: null };
-  const hybridScrollRef = activeTab === "hybrid" ? mainRef : { current: null };  // ⭐ hybrid 탭 스크롤
 
   // 곡 변경 시: 현재 탭이 새 곡에서 유효한지 검사
   useEffect(() => {
     const currentSong = songs.find((s) => s.id === id);
     if (!currentSong) return;
 
-    const songHasMxl = Boolean(currentSong.mxlFile);
-    const songHasMidi = Boolean(currentSong.midiFile);  // ⭐ hybrid 탭 검사용
+    const songHasMidi = Boolean(currentSong.midiFile);
     const songHasLyrics = currentSong.verses && currentSong.verses.length > 0;
 
     const tabValid =
       activeTab === "sheet" ||
-      (activeTab === "practice" && songHasMxl) ||
-      (activeTab === "metronome" && songHasMxl) ||
-      (activeTab === "mxlplay" && songHasMxl) ||
-      (activeTab === "hybrid" && songHasMxl && songHasMidi) ||  // ⭐ hybrid는 mxl+midi 모두 필요
+      (activeTab === "accompanist" && songHasMidi) ||
       (activeTab === "lyrics" && songHasLyrics);
 
     if (!tabValid) {
       setActiveTab("sheet");
     }
 
-    if (midi.ready) midi.stop();
-    if (metronome.ready) metronome.stop();
-    if (mxl.ready) mxl.stop();
-    if (hybrid.ready) hybrid.stop();  // ⭐ hybrid 탭 stop 추가
+    if (accompanist.ready) accompanist.stop();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, songs]);
 
   // 탭 전환 시 비활성 플레이어 정지 + 확장 패널 닫기
   useEffect(() => {
-    if (!["sheet", "practice", "lyrics"].includes(activeTab) && midi.playing) midi.stop();
-    if (activeTab !== "metronome" && metronome.playing) metronome.stop();
-    if (activeTab !== "mxlplay" && mxl.playing) mxl.stop();
-    if (activeTab !== "hybrid" && hybrid.playing) hybrid.stop();  // ⭐ hybrid 탭 stop 추가
+    if (activeTab !== "accompanist" && activeTab !== "sheet" && activeTab !== "lyrics") {
+      if (accompanist.playing) accompanist.stop();
+    }
     setFooterExpanded(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
@@ -191,10 +165,7 @@ export default function SongDetailPage() {
 
   const tabs = [
     { key: "sheet", label: "악보" },
-    ...(hasPractice ? [{ key: "practice", label: "연습" }] : []),
-    ...(hasMetronome ? [{ key: "metronome", label: "박자연습" }] : []),
-    ...(hasMxlPlayer ? [{ key: "mxlplay", label: "MXL재생" }] : []),
-    ...(hasHybrid ? [{ key: "hybrid", label: "hybrid" }] : []),  // ⭐ hybrid 탭 (옵션 B PoC)
+    ...(hasAccompanist ? [{ key: "accompanist", label: "반주기" }] : []),
     { key: "lyrics", label: "가사" },
   ];
 
@@ -210,23 +181,12 @@ export default function SongDetailPage() {
     height: "2px", backgroundColor: "white",
   };
 
-  // 현재 활성 플레이어
-  const hasActivePlayer =
-    (activeTab === "sheet" && hasMidi) ||
-    activeTab === "practice" ||
-    activeTab === "metronome" ||
-    activeTab === "mxlplay" ||
-    activeTab === "hybrid" ||  // ⭐ hybrid 탭 (옵션 B PoC)
-    (activeTab === "lyrics" && hasMidi);
+  // 현재 활성 플레이어 — 반주기 플레이어는 sheet/lyrics/accompanist 모든 탭에서 사용
+  const hasActivePlayer = hasAccompanist;
 
-  const activePlayer =
-    (activeTab === "sheet" || activeTab === "lyrics") ? midi :
-    activeTab === "practice" ? midi :
-    activeTab === "metronome" ? metronome :
-    activeTab === "mxlplay" ? mxl :
-    activeTab === "hybrid" ? hybrid : null;  // ⭐ hybrid 탭은 hybrid hook 사용
+  const activePlayer = hasAccompanist ? accompanist : null;
 
-  const activeShowSoundToggle = activeTab === "metronome";
+  const activeShowSoundToggle = false;
 
   // 메모 슬롯
   const memoNode = (
@@ -295,81 +255,30 @@ export default function SongDetailPage() {
         <div className="max-w-3xl mx-auto" style={{ position: "relative" }}>
           {activeTab === "sheet" && <SheetView sheetImage={song.sheetImage} title={song.title} />}
 
-          {/* ⭐ 가사: currentLoop, playing, scrollContainerRef 전달 */}
+          {/* 가사: currentLoop, playing 전달 */}
           {activeTab === "lyrics" && (
             <LyricsView
               verses={song.verses}
-              currentLoop={midi.currentLoop}
-              playing={midi.playing}
+              currentLoop={accompanist.currentLoop}
+              playing={accompanist.playing}
             />
           )}
 
-          {/* ⭐ OsmdView: 활성 탭일 때만 scrollContainerRef 전달 */}
-          {hasPractice && (
-            <div style={{
-              visibility: activeTab === "practice" ? "visible" : "hidden",
-              position: activeTab === "practice" ? "static" : "absolute",
-              top: 0, left: 0, right: 0,
-              pointerEvents: activeTab === "practice" ? "auto" : "none",
-              zIndex: activeTab === "practice" ? 1 : -1,
-            }}>
-              <OsmdView mxlUrl={song.mxlFile} originalTime={activeTab === "practice" ? midi.originalTime : 0}
-                melodyTimes={midi.melodyTimes} playing={activeTab === "practice" && midi.playing} scrollContainerRef={practiceScrollRef}
-                currentLoop={activeTab === "practice" ? midi.currentLoop : 0} midiBpm={midi.tempo}
-                midiOffset={midi.melodyTimes?.[0] || 0} />
-            </div>
-          )}
-
-          {hasMetronome && (
-            <div style={{
-              visibility: activeTab === "metronome" ? "visible" : "hidden",
-              position: activeTab === "metronome" ? "static" : "absolute",
-              top: 0, left: 0, right: 0,
-              pointerEvents: activeTab === "metronome" ? "auto" : "none",
-              zIndex: activeTab === "metronome" ? 1 : -1,
-            }}>
-              <OsmdView mxlUrl={song.mxlFile} originalTime={metronome.originalTime}
-                melodyTimes={metronome.melodyTimes} playing={activeTab === "metronome" && metronome.playing} scrollContainerRef={metronomeScrollRef}
-                currentLoop={metronome.currentLoop} midiBpm={metronome.tempo}
-                midiOffset={metronome.melodyTimes?.[0] || 0} />
-            </div>
-          )}
-
-          {hasMxlPlayer && (
-            <div style={{
-              visibility: activeTab === "mxlplay" ? "visible" : "hidden",
-              position: activeTab === "mxlplay" ? "static" : "absolute",
-              top: 0, left: 0, right: 0,
-              pointerEvents: activeTab === "mxlplay" ? "auto" : "none",
-              zIndex: activeTab === "mxlplay" ? 1 : -1,
-            }}>
-              <OsmdViewMxl
-                mxlUrl={song.mxlFile}
-                currentStepIdx={mxl.currentStepIdx}
-                playing={activeTab === "mxlplay" && mxl.playing}
-                scrollContainerRef={mxlScrollRef}
-                currentLoop={mxl.currentLoop}
-              />
-            </div>
-          )}
-
-          {/* ⭐ hybrid 탭 (옵션 B PoC) — cursor=MXL, 소리=MIDI */}
-          {hasHybrid && (
-            <div style={{
-              visibility: activeTab === "hybrid" ? "visible" : "hidden",
-              position: activeTab === "hybrid" ? "static" : "absolute",
-              top: 0, left: 0, right: 0,
-              pointerEvents: activeTab === "hybrid" ? "auto" : "none",
-              zIndex: activeTab === "hybrid" ? 1 : -1,
-            }}>
-              <OsmdViewMxl
-                mxlUrl={song.mxlFile}
-                currentStepIdx={hybrid.currentStepIdx}
-                playing={activeTab === "hybrid" && hybrid.playing}
-                scrollContainerRef={hybridScrollRef}
-                currentLoop={hybrid.currentLoop}
-              />
-            </div>
+          {/* 반주기 탭: PDF 악보 이미지 + phase 표시 */}
+          {activeTab === "accompanist" && (
+            <>
+              <SheetView sheetImage={song.sheetImage} title={song.title} />
+              {accompanist.playing && accompanist.phaseLabel && (
+                <div style={{
+                  position: "fixed", top: headerH + 8, right: 16, zIndex: 40,
+                  backgroundColor: "rgba(0,0,0,0.7)", color: "white",
+                  padding: "4px 12px", borderRadius: "12px",
+                  fontSize: "0.8rem", fontWeight: 600,
+                }}>
+                  {accompanist.phaseLabel}
+                </div>
+              )}
+            </>
           )}
         </div>
       </main>
