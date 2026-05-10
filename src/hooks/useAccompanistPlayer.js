@@ -203,8 +203,8 @@ export default function useAccompanistPlayer(
           const introEnd = amenStart; // 아멘 시작 전까지
           introRangeRef.current = { start: introStart, end: introEnd };
 
-          // 본곡: 앞 공백 스킵 ~ 아멘 시작 전
-          bodyRangeRef.current = { start: firstNoteTime, end: amenStart };
+          // 본곡: MIDI 처음부터 ~ 아멘 시작 전 (못갖춘마디 준비 박자 유지)
+          bodyRangeRef.current = { start: 0, end: amenStart };
         } else {
           // 아멘 없음
           amenRangeRef.current = { start: 0, end: 0 };
@@ -215,8 +215,8 @@ export default function useAccompanistPlayer(
           const introEnd = measures[totalMeasures - 1].endSec;
           introRangeRef.current = { start: introStart, end: introEnd };
 
-          // 본곡: 앞 공백 스킵 ~ MIDI 끝
-          bodyRangeRef.current = { start: firstNoteTime, end: midi.duration };
+          // 본곡: MIDI 처음부터 ~ MIDI 끝 (못갖춘마디 준비 박자 유지)
+          bodyRangeRef.current = { start: 0, end: midi.duration };
         }
 
         // 전체 재생 시간 계산
