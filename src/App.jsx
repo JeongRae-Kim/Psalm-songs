@@ -4,7 +4,6 @@ import HomePage from "./pages/HomePage";
 import SongDetailPage from "./pages/SongDetailPage";
 import SettingsPage from "./pages/SettingsPage";
 import InstallBanner from "./components/InstallBanner";
-import DebugConsole from "./components/DebugConsole";
 
 export default function App() {
   return (
@@ -15,7 +14,6 @@ export default function App() {
         <Route path="/settings" element={<SettingsPage />} />
       </Routes>
       <InstallBanner />
-      <DebugConsole />
     </BrowserRouter>
   );
 }
