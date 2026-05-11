@@ -4,6 +4,7 @@
  * 1단: 정지, 재생/일시정지 토글, 프로그레스 바, 절 카운트
  * 2단: 템포 슬라이더 (전체 폭), 시간 표시, 메모
  */
+import { getAudioContext } from "../hooks/audioContext";
 
 /* ── 아이콘 ── */
 const PlayIcon = () => (
@@ -74,6 +75,16 @@ export default function MiniPlayer({ player, showSoundToggle = false, expanded =
     );
   }
 
+  const handlePlayPause = () => {
+    if (player.playing) {
+      player.pause();
+    } else {
+      // iOS Safari 호환: 사용자 제스처 내에서 동기적으로 AudioContext 생성+resume
+      getAudioContext();
+      player.play();
+    }
+  };
+
   const handleProgressClick = (e) => {
     const rect = e.currentTarget.getBoundingClientRect();
     player.seekTo(Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)));
@@ -92,7 +103,7 @@ export default function MiniPlayer({ player, showSoundToggle = false, expanded =
         </button>
 
         {/* 재생/일시정지 토글 */}
-        <button onClick={player.playing ? player.pause : player.play}
+        <button onClick={handlePlayPause}
           style={{ width: "40px", height: "40px", minWidth: "40px" }}
           className="shrink-0 rounded-full flex items-center justify-center bg-white/15 text-white hover:bg-white/25 active:bg-white/35 transition-colors"
           title={player.playing ? "일시정지" : "재생"}>

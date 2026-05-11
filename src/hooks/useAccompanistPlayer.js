@@ -18,6 +18,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { Midi } from "@tonejs/midi";
 import { SplendidGrandPiano, ElectricPiano, Soundfont } from "smplr";
+import { getAudioContext } from "./audioContext";
 
 /* ─────────────────────────────────────────────────
    헬퍼: 악기 인스턴스 생성
@@ -346,9 +347,8 @@ export default function useAccompanistPlayer(
       pianoRef.current = null;
     }
     setPianoLoading(true);
-    // iOS 호환: 전역 AudioContext 사용
-    const { ensureAudioContext } = await import("./audioContext");
-    const ctx = await ensureAudioContext();
+    // AudioContext는 MiniPlayer의 클릭 핸들러에서 이미 생성+resume됨
+    const ctx = getAudioContext();
     audioCtxRef.current = ctx;
     const inst = await createInstrument(ctx, instrument);
     pianoRef.current = inst;
