@@ -21,6 +21,8 @@ export function ThemeProvider({ children }) {
     return Math.min(32, Math.max(12, num));
   });
 
+  const [instrument, setInstrumentState] = useState(() => getItem("instrument", "piano"));
+
   const [systemDark, setSystemDark] = useState(
     () => window.matchMedia("(prefers-color-scheme: dark)").matches
   );
@@ -66,9 +68,14 @@ export function ThemeProvider({ children }) {
     setItem("fontSize", String(clamped));
   }, []);
 
+  const setInstrument = useCallback((i) => {
+    setInstrumentState(i);
+    setItem("instrument", i);
+  }, []);
+
   return (
     <ThemeContext.Provider
-      value={{ theme, setTheme, darkMode, setDarkMode, isDark, font, setFont, fontSize, setFontSize }}
+      value={{ theme, setTheme, darkMode, setDarkMode, isDark, font, setFont, fontSize, setFontSize, instrument, setInstrument }}
     >
       {children}
     </ThemeContext.Provider>

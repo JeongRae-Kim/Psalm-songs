@@ -10,9 +10,34 @@
  */
 import { useState, useRef, useCallback, useEffect } from "react";
 import { Midi } from "@tonejs/midi";
-import { SplendidGrandPiano } from "smplr";
+import { SplendidGrandPiano, ElectricPiano, Soundfont } from "smplr";
 
-export default function useMidiPlayer(midiUrl, totalLoops = 1) {
+/* ── 악기 인스턴스 생성 헬퍼 ── */
+async function createInstrument(ctx, instrumentKey) {
+  let inst;
+  switch (instrumentKey) {
+    case "epiano":
+      inst = new ElectricPiano(ctx, { instrument: "CP80" });
+      break;
+    case "organ":
+      inst = new Soundfont(ctx, { instrument: "church_organ" });
+      break;
+    case "harpsichord":
+      inst = new Soundfont(ctx, { instrument: "harpsichord" });
+      break;
+    case "celesta":
+      inst = new Soundfont(ctx, { instrument: "celesta" });
+      break;
+    case "piano":
+    default:
+      inst = new SplendidGrandPiano(ctx);
+      break;
+  }
+  await inst.loaded();
+  return inst;
+}
+
+export default function useMidiPlayer(midiUrl, totalLoops = 1, instrument = "piano") {
   const [loading, setLoading] = useState(false);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState(null);
@@ -98,17 +123,24 @@ export default function useMidiPlayer(midiUrl, totalLoops = 1) {
     return () => { cancelled = true; };
   }, [midiUrl]);
 
-  // ── 피아노 초기화 ──
+  // ── 악기 초기화 ──
+  const instrumentRef = useRef(instrument);
+
   const ensurePiano = useCallback(async () => {
-    if (pianoRef.current) return;
+    if (pianoRef.current && instrumentRef.current === instrument) return;
+    if (pianoRef.current) {
+      pianoRef.current.stop();
+      pianoRef.current = null;
+    }
     setPianoLoading(true);
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    audioCtxRef.current = ctx;
-    const piano = new SplendidGrandPiano(ctx);
-    await piano.loaded();
-    pianoRef.current = piano;
+    if (!audioCtxRef.current) {
+      audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    const inst = await createInstrument(audioCtxRef.current, instrument);
+    pianoRef.current = inst;
+    instrumentRef.current = instrument;
     setPianoLoading(false);
-  }, []);
+  }, [instrument]);
 
   // ── 노트 스케줄링 ──
   const scheduleNotes = useCallback((fromTime) => {

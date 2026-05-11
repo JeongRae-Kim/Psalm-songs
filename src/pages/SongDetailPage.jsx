@@ -6,6 +6,7 @@ import useRecent from "../hooks/useRecent";
 import useMemos from "../hooks/useMemos";
 import useAccompanistPlayer from "../hooks/useAccompanistPlayer";
 import useMidiPlayer from "../hooks/useMidiPlayer";
+import { useTheme } from "../contexts/ThemeContext";
 import LyricsView from "../components/LyricsView";
 import SheetView from "../components/SheetView";
 import MemoEditor from "../components/MemoEditor";
@@ -60,6 +61,7 @@ export default function SongDetailPage() {
   const { isFavorite, toggleFavorite } = useFavorites();
   const { addRecent } = useRecent();
   const { getMemo, saveMemo } = useMemos();
+  const { instrument } = useTheme();
 
   const [activeTab, setActiveTab] = useState(location.state?.tab || "sheet");
   const [immersive, setImmersive] = useState(false);
@@ -78,12 +80,13 @@ export default function SongDetailPage() {
 
   const totalLoops = song?.verses?.length || 1;
 
-  const midi = useMidiPlayer(hasMidi ? song.midiFile : null, totalLoops);
+  const midi = useMidiPlayer(hasMidi ? song.midiFile : null, 1, instrument);
   const accompanist = useAccompanistPlayer(
     hasAccompanist ? song.midiFile : null,
     totalLoops,
     song?.introMeasures || 4,
-    song?.hasAmen || false
+    song?.hasAmen || false,
+    instrument
   );
 
   // 곡 변경 시: 현재 탭이 새 곡에서 유효한지 검사

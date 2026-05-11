@@ -17,7 +17,34 @@
  */
 import { useState, useRef, useCallback, useEffect } from "react";
 import { Midi } from "@tonejs/midi";
-import { SplendidGrandPiano } from "smplr";
+import { SplendidGrandPiano, ElectricPiano, Soundfont } from "smplr";
+
+/* ─────────────────────────────────────────────────
+   헬퍼: 악기 인스턴스 생성
+   ───────────────────────────────────────────────── */
+async function createInstrument(ctx, instrumentKey) {
+  let inst;
+  switch (instrumentKey) {
+    case "epiano":
+      inst = new ElectricPiano(ctx, { instrument: "CP80" });
+      break;
+    case "organ":
+      inst = new Soundfont(ctx, { instrument: "church_organ" });
+      break;
+    case "harpsichord":
+      inst = new Soundfont(ctx, { instrument: "harpsichord" });
+      break;
+    case "celesta":
+      inst = new Soundfont(ctx, { instrument: "celesta" });
+      break;
+    case "piano":
+    default:
+      inst = new SplendidGrandPiano(ctx);
+      break;
+  }
+  await inst.loaded();
+  return inst;
+}
 
 /* ─────────────────────────────────────────────────
    헬퍼: MIDI에서 마디 경계(초) 배열 계산
@@ -103,7 +130,8 @@ export default function useAccompanistPlayer(
   midiUrl,
   totalLoops = 1,
   introMeasures = 4,
-  hasAmen = false
+  hasAmen = false,
+  instrument = "piano"
 ) {
   // ── 상태 ──
   const [loading, setLoading] = useState(false);
@@ -177,11 +205,71 @@ export default function useAccompanistPlayer(
           })
         );
         all.sort((a, b) => a.time - b.time);
-        notesRef.current = all;
 
         // 마디 경계 계산
         const measures = computeMeasureBoundaries(midi);
         measuresRef.current = measures;
+
+        // ── 마지막 마디 마지막 beat 음표 duration 보정 ──
+        // 본곡 마지막 마디의 마지막 beat 음표들이 대응 마디보다 짧으면 보정
+        const totalMeasuresCount = measures.length;
+        if (totalMeasuresCount >= 2) {
+          const lastMIdx = totalMeasuresCount - 1;
+          const lastM = measures[lastMIdx];
+
+          // 같은 박자의 대응 마디 찾기 (절반 위치 근처)
+          const halfIdx = Math.floor(totalMeasuresCount / 2);
+          let compIdx = null;
+          for (let i = halfIdx - 2; i <= halfIdx + 2; i++) {
+            if (i >= 0 && i < lastMIdx && measures[i].ts === lastM.ts) {
+              compIdx = i;
+              break;
+            }
+          }
+          if (compIdx === null) {
+            for (let i = lastMIdx - 1; i >= 0; i--) {
+              if (measures[i].ts === lastM.ts) { compIdx = i; break; }
+            }
+          }
+
+          if (compIdx !== null) {
+            const compM = measures[compIdx];
+            // 각 마디의 마지막 beat 음표들
+            const lastBeatNotes = all.filter(
+              (n) => n.time >= lastM.startSec && n.time < lastM.endSec
+            );
+            const compBeatNotes = all.filter(
+              (n) => n.time >= compM.startSec && n.time < compM.endSec
+            );
+
+            if (lastBeatNotes.length > 0 && compBeatNotes.length > 0) {
+              const lastBeatTick = Math.max(...lastBeatNotes.map((n) => n.time));
+              const compBeatTick = Math.max(...compBeatNotes.map((n) => n.time));
+
+              const lastFinal = lastBeatNotes.filter((n) => n.time === lastBeatTick);
+              const compFinal = compBeatNotes.filter((n) => n.time === compBeatTick);
+
+              const lastAvgDur = lastFinal.reduce((s, n) => s + n.duration, 0) / lastFinal.length;
+              const compAvgDur = compFinal.reduce((s, n) => s + n.duration, 0) / compFinal.length;
+
+              if (compAvgDur > lastAvgDur && (compAvgDur - lastAvgDur) / compAvgDur > 0.15) {
+                // 15% 이상 짧으면 보정
+                lastFinal.forEach((n) => {
+                  const matchComp = compFinal.find((c) => true); // 대표 duration 사용
+                  if (matchComp) {
+                    console.log(
+                      `[반주기] 마지막 음표 보정: note=${n.midi}, ` +
+                      `${n.duration.toFixed(3)}s → ${matchComp.duration.toFixed(3)}s`
+                    );
+                    n.duration = matchComp.duration;
+                  }
+                });
+              }
+            }
+          }
+        }
+
+        notesRef.current = all;
 
         // 첫 음표 시작 시간 (앞 공백)
         const firstNoteTime = all.length > 0 ? all[0].time : 0;
@@ -248,17 +336,25 @@ export default function useAccompanistPlayer(
     return () => { cancelled = true; };
   }, [midiUrl]);
 
-  // ── 피아노 초기화 ──
+  // ── 악기 초기화 ──
+  const instrumentRef = useRef(instrument);
+
   const ensurePiano = useCallback(async () => {
-    if (pianoRef.current) return;
+    // 악기가 변경되었으면 기존 인스턴스 해제 후 재생성
+    if (pianoRef.current && instrumentRef.current === instrument) return;
+    if (pianoRef.current) {
+      pianoRef.current.stop();
+      pianoRef.current = null;
+    }
     setPianoLoading(true);
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    audioCtxRef.current = ctx;
-    const piano = new SplendidGrandPiano(ctx);
-    await piano.loaded();
-    pianoRef.current = piano;
+    if (!audioCtxRef.current) {
+      audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    const inst = await createInstrument(audioCtxRef.current, instrument);
+    pianoRef.current = inst;
+    instrumentRef.current = instrument;
     setPianoLoading(false);
-  }, []);
+  }, [instrument]);
 
   // ── 구간 내 노트 스케줄링 ──
   const scheduleRange = useCallback(

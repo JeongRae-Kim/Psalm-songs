@@ -29,10 +29,18 @@ const FONTS = [
   { key: "pretendard", label: "Pretendard" },
 ];
 
+const INSTRUMENTS = [
+  { key: "piano", label: "그랜드 피아노", desc: "따뜻하고 풍성한 어쿠스틱 피아노" },
+  { key: "epiano", label: "일렉트릭 피아노", desc: "부드럽고 모던한 전자 피아노" },
+  { key: "organ", label: "교회 오르간", desc: "장엄하고 웅장한 파이프 오르간" },
+  { key: "harpsichord", label: "하프시코드", desc: "또렷하고 고풍스러운 건반 악기" },
+  { key: "celesta", label: "첼레스타", desc: "맑고 영롱한 종소리 건반 악기" },
+];
+
 export default function SettingsPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { theme, setTheme, darkMode, setDarkMode, font, setFont, fontSize, setFontSize } = useTheme();
+  const { theme, setTheme, darkMode, setDarkMode, font, setFont, fontSize, setFontSize, instrument, setInstrument } = useTheme();
 
   const handleBack = () => {
     if (location.state?.from) {
@@ -170,6 +178,36 @@ export default function SettingsPage() {
               여호와는 나의 목자시니 내게 부족함이 없으리로다
             </p>
           </div>
+        </section>
+
+        {/* 악기 선택 */}
+        <section>
+          <h2 className="text-sm font-medium text-t-secondary mb-3">재생 악기</h2>
+          <div className="flex flex-col gap-2">
+            {INSTRUMENTS.map((inst) => (
+              <button
+                key={inst.key}
+                onClick={() => setInstrument(inst.key)}
+                className={`flex items-center justify-between px-4 py-3 rounded-lg
+                  transition-colors border
+                  ${instrument === inst.key
+                    ? "bg-accent text-accent-text border-accent"
+                    : "bg-card text-t-primary border-b-light hover:border-b-default"
+                  }`}
+              >
+                <div>
+                  <span className="text-sm font-medium">{inst.label}</span>
+                  <span className={`text-xs ml-2 ${instrument === inst.key ? "opacity-70" : "text-t-hint"}`}>
+                    {inst.desc}
+                  </span>
+                </div>
+                {instrument === inst.key && <span>✓</span>}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-t-hint mt-2">
+            악기 변경 시 다음 재생부터 적용됩니다
+          </p>
         </section>
 
       </main>
