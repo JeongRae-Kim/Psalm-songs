@@ -80,7 +80,7 @@ export default function SongDetailPage() {
 
   const totalLoops = song?.verses?.length || 1;
 
-  const midi = useMidiPlayer(hasMidi ? song.midiFile : null, 1, instrument);
+  const midi = useMidiPlayer(hasMidi ? song.midiFile : null, totalLoops, instrument);
   const accompanist = useAccompanistPlayer(
     hasAccompanist ? song.midiFile : null,
     totalLoops,

@@ -37,6 +37,47 @@ async function createInstrument(ctx, instrumentKey) {
   return inst;
 }
 
+/* ── 마디 경계 계산 (마지막 음표 보정용) ── */
+function computeMeasureBoundaries(midi) {
+  const tpb = midi.header.ppq;
+  const tsEvents = (midi.header.timeSignatures || [])
+    .map((ts) => ({ ticks: ts.ticks, num: ts.timeSignature[0], den: ts.timeSignature[1] }))
+    .sort((a, b) => a.ticks - b.ticks);
+  if (tsEvents.length === 0) tsEvents.push({ ticks: 0, num: 4, den: 4 });
+
+  let totalTicks = 0;
+  midi.tracks.forEach((track) => {
+    track.notes.forEach((n) => {
+      const endTick = midi.header.secondsToTicks(n.time + n.duration);
+      if (endTick > totalTicks) totalTicks = endTick;
+    });
+  });
+  if (totalTicks === 0) totalTicks = midi.header.secondsToTicks(midi.duration);
+
+  const measures = [];
+  let currentTick = 0;
+  let tsIdx = 0;
+  while (currentTick < totalTicks) {
+    while (tsIdx < tsEvents.length - 1 && tsEvents[tsIdx + 1].ticks <= currentTick) tsIdx++;
+    const { num, den } = tsEvents[tsIdx];
+    const measureTicks = Math.round(num * (4 / den) * tpb);
+    const nextTsTick = tsIdx < tsEvents.length - 1 ? tsEvents[tsIdx + 1].ticks : totalTicks + 1;
+    const endTick = Math.min(currentTick + measureTicks, nextTsTick);
+    const actualTicks = endTick - currentTick;
+    measures.push({ startTick: currentTick, endTick, num, den, actualTicks, measureTicks });
+    currentTick = endTick;
+  }
+
+  const validMeasures = measures.filter((m) => m.actualTicks >= m.measureTicks * 0.1);
+  const tickToSec = (tick) => midi.header.ticksToSeconds(tick);
+
+  return validMeasures.map((m) => ({
+    startSec: tickToSec(m.startTick),
+    endSec: tickToSec(m.endTick),
+    ts: `${m.num}/${m.den}`,
+  }));
+}
+
 export default function useMidiPlayer(midiUrl, totalLoops = 1, instrument = "piano") {
   const [loading, setLoading] = useState(false);
   const [ready, setReady] = useState(false);
@@ -93,6 +134,47 @@ export default function useMidiPlayer(midiUrl, totalLoops = 1, instrument = "pia
           all.push({ time: n.time, duration: n.duration, midi: n.midi, velocity: n.velocity });
         }));
         all.sort((a, b) => a.time - b.time);
+
+        // ── 마지막 마디 마지막 beat 음표 duration 보정 ──
+        const measures = computeMeasureBoundaries(midi);
+        const totalMeasuresCount = measures.length;
+        if (totalMeasuresCount >= 2) {
+          const lastMIdx = totalMeasuresCount - 1;
+          const lastM = measures[lastMIdx];
+          const halfIdx = Math.floor(totalMeasuresCount / 2);
+          let compIdx = null;
+          for (let i = halfIdx - 2; i <= halfIdx + 2; i++) {
+            if (i >= 0 && i < lastMIdx && measures[i].ts === lastM.ts) { compIdx = i; break; }
+          }
+          if (compIdx === null) {
+            for (let i = lastMIdx - 1; i >= 0; i--) {
+              if (measures[i].ts === lastM.ts) { compIdx = i; break; }
+            }
+          }
+          if (compIdx !== null) {
+            const compM = measures[compIdx];
+            const lastBeatNotes = all.filter((n) => n.time >= lastM.startSec && n.time < lastM.endSec);
+            const compBeatNotes = all.filter((n) => n.time >= compM.startSec && n.time < compM.endSec);
+            if (lastBeatNotes.length > 0 && compBeatNotes.length > 0) {
+              const lastBeatTick = Math.max(...lastBeatNotes.map((n) => n.time));
+              const compBeatTick = Math.max(...compBeatNotes.map((n) => n.time));
+              const lastFinal = lastBeatNotes.filter((n) => n.time === lastBeatTick);
+              const compFinal = compBeatNotes.filter((n) => n.time === compBeatTick);
+              const lastAvgDur = lastFinal.reduce((s, n) => s + n.duration, 0) / lastFinal.length;
+              const compAvgDur = compFinal.reduce((s, n) => s + n.duration, 0) / compFinal.length;
+              if (compAvgDur > lastAvgDur && (compAvgDur - lastAvgDur) / compAvgDur > 0.15) {
+                lastFinal.forEach((n) => {
+                  const matchComp = compFinal.find(() => true);
+                  if (matchComp) {
+                    console.log(`[MIDI] 마지막 음표 보정: note=${n.midi}, ${n.duration.toFixed(3)}s → ${matchComp.duration.toFixed(3)}s`);
+                    n.duration = matchComp.duration;
+                  }
+                });
+              }
+            }
+          }
+        }
+
         notesRef.current = all;
 
         if (midi.tracks.length > 0) {
@@ -133,10 +215,11 @@ export default function useMidiPlayer(midiUrl, totalLoops = 1, instrument = "pia
       pianoRef.current = null;
     }
     setPianoLoading(true);
-    if (!audioCtxRef.current) {
-      audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
-    }
-    const inst = await createInstrument(audioCtxRef.current, instrument);
+    // iOS 호환: 전역 AudioContext 사용
+    const { ensureAudioContext } = await import("./audioContext");
+    const ctx = await ensureAudioContext();
+    audioCtxRef.current = ctx;
+    const inst = await createInstrument(ctx, instrument);
     pianoRef.current = inst;
     instrumentRef.current = instrument;
     setPianoLoading(false);
@@ -215,7 +298,6 @@ export default function useMidiPlayer(midiUrl, totalLoops = 1, instrument = "pia
     if (!ready) return;
     await ensurePiano();
     const ctx = audioCtxRef.current;
-    if (ctx.state === "suspended") await ctx.resume();
 
     // 마지막 loop 끝난 후 재생 시 처음부터
     if (currentLoopRef.current >= totalLoopsRef.current) {

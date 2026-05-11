@@ -340,17 +340,17 @@ export default function useAccompanistPlayer(
   const instrumentRef = useRef(instrument);
 
   const ensurePiano = useCallback(async () => {
-    // 악기가 변경되었으면 기존 인스턴스 해제 후 재생성
     if (pianoRef.current && instrumentRef.current === instrument) return;
     if (pianoRef.current) {
       pianoRef.current.stop();
       pianoRef.current = null;
     }
     setPianoLoading(true);
-    if (!audioCtxRef.current) {
-      audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
-    }
-    const inst = await createInstrument(audioCtxRef.current, instrument);
+    // iOS 호환: 전역 AudioContext 사용
+    const { ensureAudioContext } = await import("./audioContext");
+    const ctx = await ensureAudioContext();
+    audioCtxRef.current = ctx;
+    const inst = await createInstrument(ctx, instrument);
     pianoRef.current = inst;
     instrumentRef.current = instrument;
     setPianoLoading(false);
@@ -475,7 +475,6 @@ export default function useAccompanistPlayer(
     if (!ready) return;
     await ensurePiano();
     const ctx = audioCtxRef.current;
-    if (ctx.state === "suspended") await ctx.resume();
 
     // 처음부터 시작 (resume 기능은 추후 확장)
     clearScheduled();
