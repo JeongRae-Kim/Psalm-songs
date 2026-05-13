@@ -145,6 +145,7 @@ export default function useAccompanistPlayer(
   const [tempo, setTempo] = useState(120);
   const [currentLoop, setCurrentLoop] = useState(0);
   const [phase, setPhase] = useState("idle"); // idle | intro | body | amen | done
+  const [infiniteLoop, setInfiniteLoop] = useState(false);  // 무한 반복 모드
 
   // ── refs ──
   const pianoRef = useRef(null);
@@ -162,6 +163,7 @@ export default function useAccompanistPlayer(
   const currentLoopRef = useRef(0);
   const phaseRef = useRef("idle");
   const totalLoopsRef = useRef(totalLoops);
+  const infiniteLoopRef = useRef(false);
 
   // 구간 정보
   const introRangeRef = useRef({ start: 0, end: 0 });   // 전주 구간(초)
@@ -176,6 +178,11 @@ export default function useAccompanistPlayer(
   useEffect(() => { totalLoopsRef.current = totalLoops; }, [totalLoops]);
   useEffect(() => { introMeasuresRef.current = introMeasures; }, [introMeasures]);
   useEffect(() => { hasAmenRef.current = hasAmen; }, [hasAmen]);
+  useEffect(() => { infiniteLoopRef.current = infiniteLoop; }, [infiniteLoop]);
+
+  const toggleInfiniteLoop = useCallback(() => {
+    setInfiniteLoop((prev) => !prev);
+  }, []);
 
   const tempoRatio = useCallback(() => originalBpm.current / tempo, [tempo]);
 
@@ -429,6 +436,17 @@ export default function useAccompanistPlayer(
         scheduleRange(body.start, body.end, 0);
 
         console.log(`[반주기] phase: body → body (${nextLoop + 1}절)`);
+      } else if (infiniteLoopRef.current) {
+        // 무한 반복 모드: 첫 절로 돌아가 본곡 재생 계속 (아멘 건너뜀)
+        currentLoopRef.current = 0;
+        setCurrentLoop(0);
+        elapsedBeforePhaseRef.current = introLen + bodyLen * totalLoopsRef.current;
+
+        const ctx = audioCtxRef.current;
+        if (ctx) startedAtRef.current = ctx.currentTime;
+        scheduleRange(body.start, body.end, 0);
+
+        console.log(`[반주기] phase: body → body (무한 반복, 1절 재시작)`);
       } else if (hasAmenRef.current) {
         // → amen
         phaseRef.current = "amen";
@@ -596,6 +614,8 @@ export default function useAccompanistPlayer(
     phaseLabel,
     currentLoop,
     totalLoops,
+    infiniteLoop,
+    toggleInfiniteLoop,
 
     // 템포
     tempo,

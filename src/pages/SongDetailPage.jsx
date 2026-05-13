@@ -3,13 +3,11 @@ import { useParams, useNavigate, useLocation } from "react-router-dom";
 import useSongs from "../hooks/useSongs";
 import useFavorites from "../hooks/useFavorites";
 import useRecent from "../hooks/useRecent";
-import useMemos from "../hooks/useMemos";
 import useAccompanistPlayer from "../hooks/useAccompanistPlayer";
 import useMidiPlayer from "../hooks/useMidiPlayer";
 import { useTheme } from "../contexts/ThemeContext";
 import LyricsView from "../components/LyricsView";
 import SheetView from "../components/SheetView";
-import MemoEditor from "../components/MemoEditor";
 import HomeIcon from "../components/icons/HomeIcon";
 import MiniPlayer from "../components/MiniPlayer";
 
@@ -45,13 +43,33 @@ const NextIcon = () => (
     <path d="M8.59 16.59L10 18l6-6-6-6-1.41 1.41L13.17 12z" />
   </svg>
 );
-const DownloadIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+
+/* ── 줌 아이콘 (탭 우측 컨트롤용) ── */
+const ZoomInIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
     stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-    <polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+    <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+    <line x1="11" y1="8" x2="11" y2="14" /><line x1="8" y1="11" x2="14" y2="11" />
   </svg>
 );
+const ZoomOutIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+    <line x1="8" y1="11" x2="14" y2="11" />
+  </svg>
+);
+
+/* 줌/폰트 컨트롤 상수 */
+const SHEET_SCALE_MIN = 1;
+const SHEET_SCALE_MAX = 3;
+const SHEET_SCALE_STEP = 0.25;
+const SHEET_SCALE_DEFAULT = 1;
+
+const LYRICS_FONT_MIN = 12;
+const LYRICS_FONT_MAX = 32;
+const LYRICS_FONT_STEP = 2;
+const LYRICS_FONT_DEFAULT = 18;
 
 export default function SongDetailPage() {
   const { id } = useParams();
@@ -60,12 +78,11 @@ export default function SongDetailPage() {
   const { songs, loading } = useSongs();
   const { isFavorite, toggleFavorite } = useFavorites();
   const { addRecent } = useRecent();
-  const { getMemo, saveMemo } = useMemos();
-  const { instrument } = useTheme();
+  const { instrument, fontSize, setFontSize } = useTheme();
 
   const [activeTab, setActiveTab] = useState(location.state?.tab || "sheet");
   const [immersive, setImmersive] = useState(false);
-  const [footerExpanded, setFooterExpanded] = useState(false);
+  const [sheetScale, setSheetScale] = useState(SHEET_SCALE_DEFAULT);  // 악보/반주기 줌
 
   const headerRef = useRef(null);
   const footerRef = useRef(null);
@@ -111,7 +128,7 @@ export default function SongDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, songs]);
 
-  // 탭 전환 시 비활성 플레이어 정지 + 확장 패널 닫기
+  // 탭 전환 시 비활성 플레이어 정지
   useEffect(() => {
     if (activeTab === "accompanist") {
       // 반주기 탭으로 오면 midi 정지
@@ -120,7 +137,6 @@ export default function SongDetailPage() {
       // 다른 탭으로 가면 accompanist 정지
       if (accompanist.playing) accompanist.stop();
     }
-    setFooterExpanded(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
@@ -149,7 +165,7 @@ export default function SongDetailPage() {
       clearTimeout(timer);
       window.removeEventListener("resize", measure);
     };
-  }, [immersive, activeTab, footerExpanded]);
+  }, [immersive, activeTab]);
 
   if (loading) {
     return (
@@ -180,7 +196,7 @@ export default function SongDetailPage() {
   ];
 
   const tabBase = {
-    flex: 1, textAlign: "center", padding: "10px 0",
+    flex: "0 1 auto", textAlign: "center", padding: "10px 12px",
     fontSize: "0.875rem", fontWeight: 500, cursor: "pointer",
     border: "none", background: "none", position: "relative", lineHeight: "1",
   };
@@ -200,12 +216,59 @@ export default function SongDetailPage() {
 
   const activeShowSoundToggle = false;
 
-  // 메모 슬롯
-  const memoNode = (
-    <div className="bg-card rounded-lg">
-      <MemoEditor value={getMemo(song.id)} onSave={(text) => saveMemo(song.id, text)} />
-    </div>
-  );
+  // ── 줌/폰트 컨트롤: 활성 탭에 따라 동작 대상 분기 ──
+  const isLyricsTab = activeTab === "lyrics";
+
+  const zoomLabel = isLyricsTab
+    ? `${fontSize}px`
+    : `${Math.round(sheetScale * 100)}%`;
+
+  const zoomCanDecrease = isLyricsTab
+    ? fontSize > LYRICS_FONT_MIN
+    : sheetScale > SHEET_SCALE_MIN;
+
+  const zoomCanIncrease = isLyricsTab
+    ? fontSize < LYRICS_FONT_MAX
+    : sheetScale < SHEET_SCALE_MAX;
+
+  const handleZoomOut = () => {
+    if (isLyricsTab) {
+      setFontSize(Math.max(LYRICS_FONT_MIN, fontSize - LYRICS_FONT_STEP));
+    } else {
+      setSheetScale(Math.max(SHEET_SCALE_MIN, +(sheetScale - SHEET_SCALE_STEP).toFixed(2)));
+    }
+  };
+
+  const handleZoomIn = () => {
+    if (isLyricsTab) {
+      setFontSize(Math.min(LYRICS_FONT_MAX, fontSize + LYRICS_FONT_STEP));
+    } else {
+      setSheetScale(Math.min(SHEET_SCALE_MAX, +(sheetScale + SHEET_SCALE_STEP).toFixed(2)));
+    }
+  };
+
+  const handleZoomReset = () => {
+    if (isLyricsTab) {
+      setFontSize(LYRICS_FONT_DEFAULT);
+    } else {
+      setSheetScale(SHEET_SCALE_DEFAULT);
+    }
+  };
+
+  const zoomBtnBase = {
+    width: "28px", height: "28px", borderRadius: "6px",
+    border: "1px solid rgba(255,255,255,0.2)", backgroundColor: "rgba(255,255,255,0.08)",
+    color: "rgba(255,255,255,0.85)",
+    display: "flex", alignItems: "center", justifyContent: "center",
+    transition: "opacity 0.15s, background-color 0.15s",
+  };
+  const zoomBtnLabel = {
+    minWidth: "44px", height: "28px", borderRadius: "6px",
+    border: "1px solid rgba(255,255,255,0.2)", backgroundColor: "rgba(255,255,255,0.08)",
+    color: "rgba(255,255,255,0.95)",
+    fontSize: "0.7rem", fontWeight: 600,
+    cursor: "pointer", padding: "0 6px",
+  };
 
   return (
     <div className="bg-page" style={{ overscrollBehavior: "none" }}>
@@ -220,6 +283,7 @@ export default function SongDetailPage() {
             </button>
             <h1 className="text-base font-bold text-t-primary truncate flex-1 min-w-0">
               {song.title}
+              <span className="ml-2 text-xs text-t-hint font-normal">· {scriptureLabel}</span>
             </h1>
             <button onClick={() => navigate("/settings", { state: { from: `/song/${id}`, tab: activeTab } })}
               className="shrink-0 text-t-hint hover:text-t-primary transition-colors"
@@ -242,7 +306,7 @@ export default function SongDetailPage() {
 
         {!immersive && (
           <div style={{ backgroundColor: "var(--accent, #374151)", display: "flex", alignItems: "center", height: "40px" }}>
-            <div style={{ maxWidth: "48rem", margin: "0 auto", width: "100%", display: "flex", alignItems: "center", height: "100%" }}>
+            <div style={{ maxWidth: "48rem", margin: "0 auto", width: "100%", display: "flex", alignItems: "center", height: "100%", paddingRight: "8px" }}>
               {tabs.map((tab) => (
                 <button key={tab.key} onClick={() => setActiveTab(tab.key)}
                   style={{ ...tabBase, ...(activeTab === tab.key ? tabActive : tabInactive) }}>
@@ -250,9 +314,39 @@ export default function SongDetailPage() {
                   {activeTab === tab.key && <span style={tabUnderline} />}
                 </button>
               ))}
-              <span style={{ color: "rgba(255,255,255,0.9)", fontSize: "0.75rem", fontWeight: 500, padding: "0 8px", whiteSpace: "nowrap", lineHeight: "1" }}>
-                {scriptureLabel}
-              </span>
+
+              {/* 우측 빈 공간 + 줌 컨트롤 */}
+              <div style={{ flex: 1 }} />
+              <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                <button onClick={handleZoomOut}
+                  disabled={!zoomCanDecrease}
+                  style={{
+                    ...zoomBtnBase,
+                    cursor: zoomCanDecrease ? "pointer" : "not-allowed",
+                    opacity: zoomCanDecrease ? 1 : 0.35,
+                  }}
+                  title={isLyricsTab ? "글자 작게" : "축소"}>
+                  <ZoomOutIcon />
+                </button>
+                <button onClick={handleZoomReset}
+                  style={{
+                    ...zoomBtnLabel,
+                    cursor: "pointer",
+                  }}
+                  title={isLyricsTab ? "글자 크기 기본값" : "100%로 리셋"}>
+                  {zoomLabel}
+                </button>
+                <button onClick={handleZoomIn}
+                  disabled={!zoomCanIncrease}
+                  style={{
+                    ...zoomBtnBase,
+                    cursor: zoomCanIncrease ? "pointer" : "not-allowed",
+                    opacity: zoomCanIncrease ? 1 : 0.35,
+                  }}
+                  title={isLyricsTab ? "글자 크게" : "확대"}>
+                  <ZoomInIcon />
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -265,21 +359,34 @@ export default function SongDetailPage() {
         WebkitOverflowScrolling: "touch", overscrollBehavior: "contain",
       }}>
         <div className="max-w-3xl mx-auto" style={{ position: "relative" }}>
-          {activeTab === "sheet" && <SheetView sheetImage={song.sheetImage} title={song.title} />}
+          {activeTab === "sheet" && (
+            <SheetView
+              sheetImage={song.sheetImage}
+              title={song.title}
+              scale={sheetScale}
+              onScaleChange={setSheetScale}
+            />
+          )}
 
-          {/* 가사: midi 플레이어의 currentLoop, playing 전달 */}
+          {/* 가사: midi 플레이어의 currentLoop, playing 전달 + 폰트 사이즈 */}
           {activeTab === "lyrics" && (
             <LyricsView
               verses={song.verses}
               currentLoop={midi.currentLoop}
               playing={midi.playing}
+              fontSize={fontSize}
             />
           )}
 
           {/* 반주기 탭: PDF 악보 이미지 + phase 표시 */}
           {activeTab === "accompanist" && (
             <>
-              <SheetView sheetImage={song.sheetImage} title={song.title} />
+              <SheetView
+                sheetImage={song.sheetImage}
+                title={song.title}
+                scale={sheetScale}
+                onScaleChange={setSheetScale}
+              />
               {accompanist.playing && accompanist.phaseLabel && (
                 <div style={{
                   position: "fixed", top: headerH + 8, right: 16, zIndex: 40,
@@ -313,9 +420,6 @@ export default function SongDetailPage() {
                   <MiniPlayer
                     player={activePlayer}
                     showSoundToggle={activeShowSoundToggle}
-                    expanded={footerExpanded}
-                    onToggleExpand={() => setFooterExpanded(!footerExpanded)}
-                    memoSlot={footerExpanded ? memoNode : null}
                   />
                 ) : (
                   <span className="flex-1 text-center text-xs font-medium text-white/90">
@@ -329,12 +433,6 @@ export default function SongDetailPage() {
                   style={{ width: "36px", height: "36px", minWidth: "36px" }}
                   className={`shrink-0 rounded-full flex items-center justify-center transition-colors ${nextSong ? "text-white/80 hover:text-white active:bg-white/10" : "text-white/20 cursor-not-allowed"}`}
                   title="다음 곡"><NextIcon /></button>
-
-                {/* 다운로드 */}
-                <a href={song.sheetPdf} download
-                  style={{ width: "36px", height: "36px", minWidth: "36px" }}
-                  className="shrink-0 rounded-full flex items-center justify-center text-white/60 hover:text-white active:bg-white/10 transition-colors"
-                  title="PDF 다운로드"><DownloadIcon /></a>
               </div>
             </div>
           </div>

@@ -89,6 +89,7 @@ export default function useMidiPlayer(midiUrl, totalLoops = 1, instrument = "pia
   const [tempo, setTempo] = useState(120);
   const [pianoLoading, setPianoLoading] = useState(false);
   const [currentLoop, setCurrentLoop] = useState(0);  // 현재 몇 번째 반복인지 (0부터)
+  const [infiniteLoop, setInfiniteLoop] = useState(false);  // 무한 반복 모드
 
   const pianoRef = useRef(null);
   const audioCtxRef = useRef(null);
@@ -103,11 +104,21 @@ export default function useMidiPlayer(midiUrl, totalLoops = 1, instrument = "pia
   const playingRef = useRef(false);
   const currentLoopRef = useRef(0);  // setTimeout 내부에서 최신값 참조용
   const totalLoopsRef = useRef(totalLoops);  // 동일 이유
+  const infiniteLoopRef = useRef(false);  // setTimeout 내부에서 최신값 참조용
 
   // totalLoops가 외부에서 바뀔 때 ref 동기화
   useEffect(() => {
     totalLoopsRef.current = totalLoops;
   }, [totalLoops]);
+
+  // infiniteLoop 동기화
+  useEffect(() => {
+    infiniteLoopRef.current = infiniteLoop;
+  }, [infiniteLoop]);
+
+  const toggleInfiniteLoop = useCallback(() => {
+    setInfiniteLoop((prev) => !prev);
+  }, []);
 
   const tempoRatio = useCallback(() => originalBpm.current / tempo, [tempo]);
 
@@ -250,6 +261,7 @@ export default function useMidiPlayer(midiUrl, totalLoops = 1, instrument = "pia
     });
 
     // 곡 끝 도달 시 처리: 다음 loop가 있으면 재생 계속, 없으면 정지
+    // 단, 무한 반복 모드면 마지막 절 후 다시 첫 절로 돌아가서 계속 재생
     const endDelay = (originalDuration.current - fromTime) * r * 1000;
     const endId = setTimeout(() => {
       if (!playingRef.current) return;
@@ -264,6 +276,15 @@ export default function useMidiPlayer(midiUrl, totalLoops = 1, instrument = "pia
         const ctx = audioCtxRef.current;
         if (ctx) startedAtRef.current = ctx.currentTime;
         scheduleNotesRef.current(0);  // 다음 loop 스케줄
+      } else if (infiniteLoopRef.current) {
+        // 무한 반복 모드: 첫 절로 리셋 후 계속 재생
+        currentLoopRef.current = 0;
+        setCurrentLoop(0);
+        pausedAtRef.current = 0;
+        setCurrentTime(0);
+        const ctx = audioCtxRef.current;
+        if (ctx) startedAtRef.current = ctx.currentTime;
+        scheduleNotesRef.current(0);
       } else {
         // 마지막 반복 종료 → 정지
         currentLoopRef.current = 0;
@@ -402,6 +423,8 @@ export default function useMidiPlayer(midiUrl, totalLoops = 1, instrument = "pia
     melodyTimes: melodyTimesRef.current,
     currentLoop,                    // 현재 몇 번째 반복 (0부터)
     totalLoops,                     // 총 반복 횟수
+    infiniteLoop,                   // 무한 반복 모드 여부
+    toggleInfiniteLoop,             // 무한 반복 토글
     play, pause, stop, seekTo, changeTempo,
   };
 }

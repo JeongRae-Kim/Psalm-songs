@@ -1,30 +1,22 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useRef, useCallback, useEffect, useState } from "react";
 
-/* ── 줌 아이콘 ── */
-const ZoomInIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-    <line x1="11" y1="8" x2="11" y2="14" /><line x1="8" y1="11" x2="14" y2="11" />
-  </svg>
-);
-const ZoomOutIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-    <line x1="8" y1="11" x2="14" y2="11" />
-  </svg>
-);
-
-export default function SheetView({ sheetImage, title }) {
+/**
+ * SheetView (줌 외부화 버전)
+ *
+ * 줌 상태(scale)는 부모 컴포넌트에서 관리하고 props로 받음.
+ * 핀치 줌, 더블탭 줌, 마우스 휠 줌 입력은 내부에서 처리하되,
+ * 결과 scale 값은 onScaleChange 콜백으로 부모에 전달.
+ *
+ * @param {string} sheetImage - 악보 이미지 경로
+ * @param {string} title - 곡 제목
+ * @param {number} scale - 현재 줌 배율 (1.0 ~ 3.0)
+ * @param {Function} onScaleChange - 줌 변경 콜백 (newScale: number) => void
+ */
+export default function SheetView({ sheetImage, title, scale = 1, onScaleChange }) {
   const [loaded, setLoaded] = useState(false);
-  const [scale, setScale] = useState(1);
   const [translate, setTranslate] = useState({ x: 0, y: 0 });
   const containerRef = useRef(null);
   const imgRef = useRef(null);
-
-  // 줌 레벨 퍼센트 (버튼용)
-  const zoomPercent = Math.round(scale * 100);
 
   // 핀치 줌 상태
   const pinchRef = useRef({
@@ -76,15 +68,23 @@ export default function SheetView({ sheetImage, title }) {
     };
   }, []);
 
-  // 확대 시에도 translate 보정
-  const handleScaleChange = useCallback((newScale) => {
-    setScale(newScale);
-    if (newScale <= 1) {
+  // scale 변경 시 translate 보정
+  const requestScaleChange = useCallback((newScale) => {
+    const clamped = Math.min(3, Math.max(1, newScale));
+    if (onScaleChange) onScaleChange(clamped);
+    if (clamped <= 1) {
       setTranslate({ x: 0, y: 0 });
     } else {
-      setTranslate(prev => clampTranslate(prev.x, prev.y, newScale));
+      setTranslate((prev) => clampTranslate(prev.x, prev.y, clamped));
     }
-  }, [clampTranslate]);
+  }, [clampTranslate, onScaleChange]);
+
+  // scale이 외부에서 1로 리셋되면 translate도 리셋
+  useEffect(() => {
+    if (scale <= 1) {
+      setTranslate({ x: 0, y: 0 });
+    }
+  }, [scale]);
 
   const handleTouchStart = useCallback((e) => {
     if (e.touches.length === 2) {
@@ -113,7 +113,7 @@ export default function SheetView({ sheetImage, title }) {
       const currentDistance = getDistance(e.touches);
       const ratio = currentDistance / pinchRef.current.initialDistance;
       const newScale = Math.min(Math.max(pinchRef.current.initialScale * ratio, 1), 3);
-      handleScaleChange(newScale);
+      requestScaleChange(newScale);
     } else if (e.touches.length === 1 && panRef.current.active && scale > 1) {
       e.preventDefault();
       const dx = (e.touches[0].clientX - panRef.current.startX) / scale;
@@ -123,7 +123,7 @@ export default function SheetView({ sheetImage, title }) {
       const clamped = clampTranslate(newTx, newTy, scale);
       setTranslate(clamped);
     }
-  }, [scale, clampTranslate, handleScaleChange]);
+  }, [scale, clampTranslate, requestScaleChange]);
 
   const handleTouchEnd = useCallback(() => {
     pinchRef.current.active = false;
@@ -138,25 +138,22 @@ export default function SheetView({ sheetImage, title }) {
     if (now - lastTapRef.current < 300) {
       e.preventDefault();
       if (scale > 1) {
-        setScale(1);
-        setTranslate({ x: 0, y: 0 });
+        requestScaleChange(1);
       } else {
-        setScale(2);
-        setTranslate({ x: 0, y: 0 });
+        requestScaleChange(2);
       }
     }
     lastTapRef.current = now;
-  }, [scale]);
+  }, [scale, requestScaleChange]);
 
-  // 마우스 휠 줌 (데스크탑에서 확인용)
+  // 마우스 휠 줌
   const handleWheel = useCallback((e) => {
     e.preventDefault();
     const delta = e.deltaY > 0 ? -0.1 : 0.1;
-    const newScale = Math.min(Math.max(scale + delta, 1), 3);
-    handleScaleChange(newScale);
-  }, [scale, handleScaleChange]);
+    requestScaleChange(scale + delta);
+  }, [scale, requestScaleChange]);
 
-  // 마우스 드래그 (데스크탑에서 확인용)
+  // 마우스 드래그
   const mouseRef = useRef({ active: false, startX: 0, startY: 0, startTx: 0, startTy: 0 });
 
   const handleMouseDown = useCallback((e) => {
@@ -216,17 +213,6 @@ export default function SheetView({ sheetImage, title }) {
 
   const isZoomed = scale > 1;
 
-  // ── 줌 버튼 핸들러 ──
-  const handleZoomButtonChange = useCallback((delta) => {
-    const newScale = Math.min(3, Math.max(1, scale + delta));
-    handleScaleChange(newScale);
-  }, [scale, handleScaleChange]);
-
-  const handleZoomReset = useCallback(() => {
-    setScale(1);
-    setTranslate({ x: 0, y: 0 });
-  }, []);
-
   return (
     <div
       style={{
@@ -234,57 +220,6 @@ export default function SheetView({ sheetImage, title }) {
         minHeight: "100%",
       }}
     >
-      {/* 줌 컨트롤 */}
-      {loaded && (
-        <div style={{
-          display: "flex", alignItems: "center", justifyContent: "flex-end",
-          gap: "6px", padding: "6px 12px",
-          position: "sticky", top: 0, zIndex: 10,
-          backgroundColor: "rgba(250, 248, 244, 0.9)",
-          backdropFilter: "blur(4px)",
-        }}>
-          <button onClick={() => handleZoomButtonChange(-0.25)}
-            disabled={scale <= 1}
-            style={{
-              width: "32px", height: "32px", borderRadius: "8px",
-              border: "1px solid rgba(0,0,0,0.15)", backgroundColor: "white",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              cursor: scale <= 1 ? "not-allowed" : "pointer",
-              opacity: scale <= 1 ? 0.4 : 1,
-              transition: "opacity 0.15s",
-            }}
-            title="축소">
-            <ZoomOutIcon />
-          </button>
-
-          <button onClick={handleZoomReset}
-            style={{
-              minWidth: "48px", height: "32px", borderRadius: "8px",
-              border: "1px solid rgba(0,0,0,0.15)", backgroundColor: "white",
-              fontSize: "0.75rem", fontWeight: 600, color: "#374151",
-              cursor: "pointer", padding: "0 8px",
-              transition: "background-color 0.15s",
-            }}
-            title="줌 리셋 (100%)">
-            {zoomPercent}%
-          </button>
-
-          <button onClick={() => handleZoomButtonChange(0.25)}
-            disabled={scale >= 3}
-            style={{
-              width: "32px", height: "32px", borderRadius: "8px",
-              border: "1px solid rgba(0,0,0,0.15)", backgroundColor: "white",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              cursor: scale >= 3 ? "not-allowed" : "pointer",
-              opacity: scale >= 3 ? 0.4 : 1,
-              transition: "opacity 0.15s",
-            }}
-            title="확대">
-            <ZoomInIcon />
-          </button>
-        </div>
-      )}
-
       {/* 악보 */}
       <div
         ref={containerRef}
