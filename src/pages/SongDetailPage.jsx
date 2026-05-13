@@ -191,8 +191,8 @@ export default function SongDetailPage() {
 
   const tabs = [
     { key: "sheet", label: "악보" },
-    ...(hasAccompanist ? [{ key: "accompanist", label: "반주기" }] : []),
     { key: "lyrics", label: "가사" },
+    ...(hasAccompanist ? [{ key: "accompanist", label: "반주기" }] : []),
   ];
 
   const tabBase = {

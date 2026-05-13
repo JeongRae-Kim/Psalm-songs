@@ -164,6 +164,8 @@ export default function useAccompanistPlayer(
   const phaseRef = useRef("idle");
   const totalLoopsRef = useRef(totalLoops);
   const infiniteLoopRef = useRef(false);
+  // 일시정지 시점 저장: { phase, currentLoop, elapsedInPhase, elapsedBeforePhase } | null
+  const pausedStateRef = useRef(null);
 
   // 구간 정보
   const introRangeRef = useRef({ start: 0, end: 0 });   // 전주 구간(초)
@@ -365,16 +367,18 @@ export default function useAccompanistPlayer(
 
   // ── 구간 내 노트 스케줄링 ──
   const scheduleRange = useCallback(
-    (rangeStart, rangeEnd, timeOffset) => {
-      // rangeStart~rangeEnd(원본 초) 구간의 노트를, timeOffset(재생 경과 초)부터 스케줄
+    (rangeStart, rangeEnd, timeOffset = 0) => {
+      // rangeStart~rangeEnd(원본 초) 구간을, timeOffset(원본 초)만큼 건너뛴 지점부터 스케줄
+      // timeOffset > 0 이면 resume 재생 (구간 중간부터 시작)
       const piano = pianoRef.current;
       if (!piano) return;
 
       const r = tempoRatio();
+      const effectiveStart = rangeStart + timeOffset; // 실제 재생 시작 지점
 
       notesRef.current.forEach((n) => {
-        if (n.time < rangeStart || n.time >= rangeEnd) return;
-        const relativeTime = n.time - rangeStart; // 구간 내 상대 시간
+        if (n.time < effectiveStart || n.time >= rangeEnd) return;
+        const relativeTime = n.time - effectiveStart; // 실제 시작 지점 기준 상대 시간
         const dur = n.duration * r;
         const delay = relativeTime * r * 1000;
 
@@ -385,12 +389,12 @@ export default function useAccompanistPlayer(
         scheduledRef.current.push(id);
       });
 
-      // 구간 끝 도달 시 다음 phase로 전환
-      const rangeDuration = (rangeEnd - rangeStart) * r;
+      // 구간 끝 도달 시 다음 phase로 전환 (남은 길이만큼 대기)
+      const remainingDuration = (rangeEnd - effectiveStart) * r;
       const endId = setTimeout(() => {
         if (!playingRef.current) return;
         advancePhaseRef.current();
-      }, rangeDuration * 1000 + 50);
+      }, remainingDuration * 1000 + 50);
       scheduledRef.current.push(endId);
     },
     [tempoRatio]
@@ -494,15 +498,7 @@ export default function useAccompanistPlayer(
     await ensurePiano();
     const ctx = audioCtxRef.current;
 
-    // 처음부터 시작 (resume 기능은 추후 확장)
     clearScheduled();
-
-    phaseRef.current = "intro";
-    setPhase("intro");
-    currentLoopRef.current = 0;
-    setCurrentLoop(0);
-    elapsedBeforePhaseRef.current = 0;
-    setCurrentTime(0);
 
     const r = tempoRatio();
     const totalPlayDur =
@@ -510,6 +506,49 @@ export default function useAccompanistPlayer(
       (bodyRangeRef.current.end - bodyRangeRef.current.start) * r * totalLoopsRef.current +
       (hasAmenRef.current ? (amenRangeRef.current.end - amenRangeRef.current.start) * r : 0);
     setDuration(totalPlayDur);
+
+    if (pausedStateRef.current) {
+      // ── 일시정지 시점에서 재개 ──
+      const { phase: savedPhase, currentLoop: savedLoop, elapsedInPhase, elapsedBeforePhase } = pausedStateRef.current;
+
+      phaseRef.current = savedPhase;
+      setPhase(savedPhase);
+      currentLoopRef.current = savedLoop;
+      setCurrentLoop(savedLoop);
+      elapsedBeforePhaseRef.current = elapsedBeforePhase;
+
+      // 저장된 phase에 해당하는 구간 가져오기
+      const range =
+        savedPhase === "intro" ? introRangeRef.current :
+        savedPhase === "body" ? bodyRangeRef.current :
+        amenRangeRef.current;
+
+      // elapsedInPhase는 템포 적용된 시간 (AudioContext 기준)이므로 원본 MIDI 시간으로 환산
+      // r = originalBpm / tempo 이므로 원본_초 = 재생_초 / r
+      const phaseOffsetOriginal = elapsedInPhase / r;
+
+      // tick의 시간 계산이 일관되도록 startedAtRef를 보정
+      // tick은 (ctx.currentTime - startedAtRef.current)로 phase 내 경과시간을 계산함
+      startedAtRef.current = ctx.currentTime - elapsedInPhase;
+
+      playingRef.current = true;
+      setPlaying(true);
+
+      scheduleRange(range.start, range.end, phaseOffsetOriginal);
+
+      pausedStateRef.current = null; // 소비
+      rafRef.current = requestAnimationFrame(tick);
+      console.log(`[반주기] resume: ${savedPhase} phase, elapsedInPhase=${elapsedInPhase.toFixed(2)}s`);
+      return;
+    }
+
+    // ── 처음부터 재생 (전주부터) ──
+    phaseRef.current = "intro";
+    setPhase("intro");
+    currentLoopRef.current = 0;
+    setCurrentLoop(0);
+    elapsedBeforePhaseRef.current = 0;
+    setCurrentTime(0);
 
     startedAtRef.current = ctx.currentTime;
     playingRef.current = true;
@@ -531,6 +570,17 @@ export default function useAccompanistPlayer(
 
   // ── 일시정지 ──
   const pause = useCallback(() => {
+    const ctx = audioCtxRef.current;
+    // 일시정지 시점 저장 (재생 중일 때만)
+    if (ctx && playingRef.current && phaseRef.current !== "idle" && phaseRef.current !== "done") {
+      const elapsedInPhase = ctx.currentTime - startedAtRef.current;
+      pausedStateRef.current = {
+        phase: phaseRef.current,
+        currentLoop: currentLoopRef.current,
+        elapsedInPhase,
+        elapsedBeforePhase: elapsedBeforePhaseRef.current,
+      };
+    }
     clearScheduled();
     pianoRef.current?.stop();
     playingRef.current = false;
@@ -556,6 +606,7 @@ export default function useAccompanistPlayer(
     elapsedBeforePhaseRef.current = 0;
     phaseRef.current = "idle";
     setPhase("idle");
+    pausedStateRef.current = null; // 일시정지 상태 초기화
   }, [stopInternal]);
 
   // ── 템포 변경 ──
