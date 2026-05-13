@@ -207,12 +207,19 @@ export default function SongDetailPage() {
 
   // 플레이리스트 모드에서 곡 변경/진입 시 자동 재생 처리
   // 활성 플레이어(midi 또는 accompanist)가 ready 상태가 되면 자동으로 play() 호출
+  //
+  // 안정성 처리:
+  // - consumeAutoPlay()를 setTimeout 콜백 내부에서 호출 → cleanup으로 인한 플래그 소실 방지
+  // - 비활성 플레이어의 ready 변경에는 반응하지 않도록 의존성 단순화
+  // - midi/accompanist 객체 전체를 의존성에서 제거 (매 렌더마다 새 객체 → 무한 재실행 방지)
+  const activePlayerReady =
+    activeTab === "accompanist" ? accompanist.ready : midi.ready;
+
   useEffect(() => {
     console.log("[자동재생 진단] effect 실행", {
       playbackMode,
       activeTab,
-      midiReady: midi.ready,
-      accompanistReady: accompanist.ready,
+      activePlayerReady,
       songId: id,
     });
 
@@ -221,38 +228,44 @@ export default function SongDetailPage() {
       return;
     }
 
-    // 활성 탭에 따라 어느 플레이어가 준비되어야 하는지 결정
-    const playerReady =
-      activeTab === "accompanist" ? accompanist.ready : midi.ready;
-
-    if (!playerReady) {
-      console.log("[자동재생 진단] → 플레이어 ready 아님, 대기");
+    if (!activePlayerReady) {
+      console.log("[자동재생 진단] → 활성 플레이어 ready 아님, 대기");
       return;
     }
 
-    // pendingAutoPlay 플래그가 있을 때만 자동 재생 (사용자 의도가 명시된 경우)
-    const shouldAutoPlay = consumeAutoPlay();
-    console.log("[자동재생 진단] consumeAutoPlay 결과:", shouldAutoPlay);
+    console.log("[자동재생 진단] → 100ms 후 consumeAutoPlay + play() 시도 예약");
 
-    if (shouldAutoPlay) {
-      const player = activeTab === "accompanist" ? accompanist : midi;
-      console.log("[자동재생 진단] → 100ms 후 play() 호출 예약");
-      // 약간의 딜레이로 ready 직후 안전하게 재생
-      const t = setTimeout(() => {
-        console.log("[자동재생 진단] → 실제 play() 호출 시도");
-        try {
-          player.play();
-          console.log("[자동재생 진단] ✓ play() 호출 성공");
-        } catch (e) {
-          console.warn("[자동재생 진단] ✗ play() 실패:", e);
+    const t = setTimeout(() => {
+      // 소비를 setTimeout 안에서 → cleanup 발생해도 플래그 보존됨
+      const shouldAutoPlay = consumeAutoPlay();
+      console.log("[자동재생 진단] (지연 실행) consumeAutoPlay 결과:", shouldAutoPlay);
+      if (!shouldAutoPlay) {
+        console.log("[자동재생 진단] (지연 실행) → 자동 재생 플래그 없음, 종료");
+        return;
+      }
+
+      console.log("[자동재생 진단] (지연 실행) → 실제 play() 호출 시도");
+      try {
+        // 클로저로 최신 참조 사용을 위해 호출 시점에 결정
+        if (activeTab === "accompanist") {
+          accompanist.play();
+        } else {
+          midi.play();
         }
-      }, 100);
-      return () => {
-        console.log("[자동재생 진단] cleanup: setTimeout 취소됨");
-        clearTimeout(t);
-      };
-    }
-  }, [playbackMode, activeTab, midi.ready, accompanist.ready, consumeAutoPlay, midi, accompanist, id]);
+        console.log("[자동재생 진단] (지연 실행) ✓ play() 호출 성공");
+      } catch (e) {
+        console.warn("[자동재생 진단] (지연 실행) ✗ play() 실패:", e);
+      }
+    }, 100);
+
+    return () => {
+      console.log("[자동재생 진단] cleanup: setTimeout 취소됨 (플래그는 보존)");
+      clearTimeout(t);
+    };
+    // 의도적으로 midi/accompanist 객체는 의존성에서 제외
+    // 위 setTimeout 콜백 내에서 호출 시점에 클로저로 참조하므로 stale 위험 낮음
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playbackMode, activeTab, activePlayerReady, id, consumeAutoPlay]);
 
   // footer 높이 측정
   useEffect(() => {
