@@ -105,7 +105,11 @@ export default function HomePage() {
             {/* 필터 + 곡 수 + 정렬 (한 줄) */}
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
-                <FilterChips active={filter} onChange={setFilter} />
+                <FilterChips
+                  active={filter}
+                  onChange={setFilter}
+                  onPlaylistClick={() => navigate("/playlist")}
+                />
                 <span className="text-xs text-t-hint">{filteredSongs.length}곡</span>
               </div>
               <SortDropdown value={sort} onChange={setSort} />

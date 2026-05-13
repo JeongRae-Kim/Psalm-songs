@@ -1,4 +1,5 @@
 import { useNavigate } from "react-router-dom";
+import AddToPlaylistButton from "./AddToPlaylistButton";
 
 export default function SongCard({ song, isFavorite, onToggleFavorite }) {
   const navigate = useNavigate();
@@ -25,6 +26,9 @@ export default function SongCard({ song, isFavorite, onToggleFavorite }) {
           {song.title}
         </span>
       </button>
+
+      {/* 플레이리스트 추가 버튼 */}
+      <AddToPlaylistButton songId={song.id} variant="icon" />
 
       <button
         onClick={(e) => { e.stopPropagation(); onToggleFavorite(song.id); }}

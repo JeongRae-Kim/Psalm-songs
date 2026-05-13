@@ -10,6 +10,7 @@ import LyricsView from "../components/LyricsView";
 import SheetView from "../components/SheetView";
 import HomeIcon from "../components/icons/HomeIcon";
 import MiniPlayer from "../components/MiniPlayer";
+import AddToPlaylistButton from "../components/AddToPlaylistButton";
 
 /* ── 아이콘 SVG (페이지 전용) ── */
 const SettingsIcon = () => (
@@ -285,6 +286,7 @@ export default function SongDetailPage() {
               {song.title}
               <span className="ml-2 text-xs text-t-hint font-normal">· {scriptureLabel}</span>
             </h1>
+            <AddToPlaylistButton songId={song.id} variant="header" />
             <button onClick={() => navigate("/settings", { state: { from: `/song/${id}`, tab: activeTab } })}
               className="shrink-0 text-t-hint hover:text-t-primary transition-colors"
               title="설정">
