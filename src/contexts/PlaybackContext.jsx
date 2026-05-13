@@ -33,10 +33,12 @@ export function PlaybackProvider({ children }) {
   const startPlaylist = useCallback((songIds, startIndex = 0) => {
     if (!songIds || songIds.length === 0) return null;
     const idx = Math.max(0, Math.min(startIndex, songIds.length - 1));
+    console.log("[Playback 진단] startPlaylist 호출:", { songIds, startIndex: idx, firstId: songIds[idx] });
     setPlaylistSongIds(songIds);
     setCurrentIndex(idx);
     setPlaybackMode("playlist");
     pendingAutoPlayRef.current = true;
+    console.log("[Playback 진단] → pendingAutoPlay = true 설정");
     return songIds[idx];
   }, []);
 
@@ -105,6 +107,7 @@ export function PlaybackProvider({ children }) {
   const consumeAutoPlay = useCallback(() => {
     const should = pendingAutoPlayRef.current;
     pendingAutoPlayRef.current = false;
+    console.log("[Playback 진단] consumeAutoPlay 호출, 반환값:", should);
     return should;
   }, []);
 

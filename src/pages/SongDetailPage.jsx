@@ -208,22 +208,51 @@ export default function SongDetailPage() {
   // 플레이리스트 모드에서 곡 변경/진입 시 자동 재생 처리
   // 활성 플레이어(midi 또는 accompanist)가 ready 상태가 되면 자동으로 play() 호출
   useEffect(() => {
-    if (playbackMode !== "playlist") return;
+    console.log("[자동재생 진단] effect 실행", {
+      playbackMode,
+      activeTab,
+      midiReady: midi.ready,
+      accompanistReady: accompanist.ready,
+      songId: id,
+    });
+
+    if (playbackMode !== "playlist") {
+      console.log("[자동재생 진단] → single 모드라 종료");
+      return;
+    }
+
     // 활성 탭에 따라 어느 플레이어가 준비되어야 하는지 결정
     const playerReady =
       activeTab === "accompanist" ? accompanist.ready : midi.ready;
-    if (!playerReady) return;
+
+    if (!playerReady) {
+      console.log("[자동재생 진단] → 플레이어 ready 아님, 대기");
+      return;
+    }
 
     // pendingAutoPlay 플래그가 있을 때만 자동 재생 (사용자 의도가 명시된 경우)
-    if (consumeAutoPlay()) {
+    const shouldAutoPlay = consumeAutoPlay();
+    console.log("[자동재생 진단] consumeAutoPlay 결과:", shouldAutoPlay);
+
+    if (shouldAutoPlay) {
       const player = activeTab === "accompanist" ? accompanist : midi;
+      console.log("[자동재생 진단] → 100ms 후 play() 호출 예약");
       // 약간의 딜레이로 ready 직후 안전하게 재생
       const t = setTimeout(() => {
-        try { player.play(); } catch (e) { console.warn("[자동 재생] play() 실패:", e); }
+        console.log("[자동재생 진단] → 실제 play() 호출 시도");
+        try {
+          player.play();
+          console.log("[자동재생 진단] ✓ play() 호출 성공");
+        } catch (e) {
+          console.warn("[자동재생 진단] ✗ play() 실패:", e);
+        }
       }, 100);
-      return () => clearTimeout(t);
+      return () => {
+        console.log("[자동재생 진단] cleanup: setTimeout 취소됨");
+        clearTimeout(t);
+      };
     }
-  }, [playbackMode, activeTab, midi.ready, accompanist.ready, consumeAutoPlay, midi, accompanist]);
+  }, [playbackMode, activeTab, midi.ready, accompanist.ready, consumeAutoPlay, midi, accompanist, id]);
 
   // footer 높이 측정
   useEffect(() => {
