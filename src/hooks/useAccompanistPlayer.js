@@ -132,7 +132,8 @@ export default function useAccompanistPlayer(
   totalLoops = 1,
   introMeasures = 4,
   hasAmen = false,
-  instrument = "piano"
+  instrument = "piano",
+  onEnded = null
 ) {
   // ── 상태 ──
   const [loading, setLoading] = useState(false);
@@ -181,6 +182,10 @@ export default function useAccompanistPlayer(
   useEffect(() => { introMeasuresRef.current = introMeasures; }, [introMeasures]);
   useEffect(() => { hasAmenRef.current = hasAmen; }, [hasAmen]);
   useEffect(() => { infiniteLoopRef.current = infiniteLoop; }, [infiniteLoop]);
+
+  // onEnded 콜백 ref: 곡 종료 시 외부에 알림 (플레이리스트 자동 이어재생용)
+  const onEndedRef = useRef(onEnded);
+  useEffect(() => { onEndedRef.current = onEnded; }, [onEnded]);
 
   const toggleInfiniteLoop = useCallback(() => {
     setInfiniteLoop((prev) => !prev);
@@ -468,6 +473,9 @@ export default function useAccompanistPlayer(
         setPhase("done");
         stopInternal();
         console.log(`[반주기] phase: body → done`);
+        if (onEndedRef.current) {
+          try { onEndedRef.current(); } catch (e) { console.warn("[반주기] onEnded 콜백 오류:", e); }
+        }
       }
     } else if (currentPhase === "amen") {
       // → done
@@ -475,6 +483,9 @@ export default function useAccompanistPlayer(
       setPhase("done");
       stopInternal();
       console.log(`[반주기] phase: amen → done`);
+      if (onEndedRef.current) {
+        try { onEndedRef.current(); } catch (e) { console.warn("[반주기] onEnded 콜백 오류:", e); }
+      }
     }
   }, [tempoRatio, scheduleRange]);
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import useSongs from "../hooks/useSongs";
 import useFavorites from "../hooks/useFavorites";
@@ -11,6 +11,7 @@ import SheetView from "../components/SheetView";
 import HomeIcon from "../components/icons/HomeIcon";
 import MiniPlayer from "../components/MiniPlayer";
 import AddToPlaylistButton from "../components/AddToPlaylistButton";
+import usePlayback from "../contexts/PlaybackContext";
 
 /* ── 아이콘 SVG (페이지 전용) ── */
 const SettingsIcon = () => (
@@ -80,6 +81,17 @@ export default function SongDetailPage() {
   const { isFavorite, toggleFavorite } = useFavorites();
   const { addRecent } = useRecent();
   const { instrument, fontSize, setFontSize } = useTheme();
+  const {
+    playbackMode,
+    playlistSongIds,
+    currentIndex: playbackIndex,
+    loopPlaylist,
+    goToNext,
+    goToPrev,
+    syncCurrentSong,
+    consumeAutoPlay,
+    exitPlaylistMode,
+  } = usePlayback();
 
   const [activeTab, setActiveTab] = useState(location.state?.tab || "sheet");
   const [immersive, setImmersive] = useState(false);
@@ -98,16 +110,31 @@ export default function SongDetailPage() {
 
   const totalLoops = song?.verses?.length || 1;
 
-  const midi = useMidiPlayer(hasMidi ? song.midiFile : null, totalLoops, instrument);
+  // ── onEnded 핸들러: 곡 끝났을 때 (곡 무한반복이 아닌 경우만 호출됨) ──
+  // playlist 모드면 다음 곡으로 자동 이동, 아니면 정지 (기본 동작)
+  const handleSongEnded = useCallback(() => {
+    if (playbackMode !== "playlist") return; // single 모드는 기본 정지 동작 유지
+    const nextId = goToNext();
+    if (nextId) {
+      // 다음 곡 페이지로 이동 (페이지 마운트 시 자동 재생 트리거됨)
+      navigate(`/song/${nextId}`);
+    } else {
+      // 다음 곡 없음 + 전체 반복 OFF → 정지 후 모드 해제
+      exitPlaylistMode();
+    }
+  }, [playbackMode, goToNext, navigate, exitPlaylistMode]);
+
+  const midi = useMidiPlayer(hasMidi ? song.midiFile : null, totalLoops, instrument, handleSongEnded);
   const accompanist = useAccompanistPlayer(
     hasAccompanist ? song.midiFile : null,
     totalLoops,
     song?.introMeasures || 4,
     song?.hasAmen || false,
-    instrument
+    instrument,
+    handleSongEnded
   );
 
-  // 곡 변경 시: 현재 탭이 새 곡에서 유효한지 검사
+  // 곡 변경 시: 현재 탭이 새 곡에서 유효한지 검사 + 모드 동기화
   useEffect(() => {
     const currentSong = songs.find((s) => s.id === id);
     if (!currentSong) return;
@@ -126,6 +153,10 @@ export default function SongDetailPage() {
 
     if (accompanist.ready) accompanist.stop();
     if (midi.ready) midi.stop();
+
+    // 플레이리스트 모드면 currentIndex를 이 곡으로 동기화
+    // (해당 곡이 플레이리스트에 없으면 자동으로 single 모드 전환)
+    syncCurrentSong(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, songs]);
 
@@ -141,9 +172,30 @@ export default function SongDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
+  // 이전/다음 곡 결정: 플레이리스트 모드면 플레이리스트 순서, 아니면 전체 곡 순서
   const currentIndex = useMemo(() => songs.findIndex((s) => s.id === id), [songs, id]);
-  const prevSong = currentIndex > 0 ? songs[currentIndex - 1] : null;
-  const nextSong = currentIndex < songs.length - 1 ? songs[currentIndex + 1] : null;
+
+  const { prevSong, nextSong } = useMemo(() => {
+    if (playbackMode === "playlist" && playlistSongIds.length > 0) {
+      // 플레이리스트 모드: playlistSongIds 내 순서로
+      const idx = playlistSongIds.indexOf(id);
+      if (idx >= 0) {
+        const prevId = idx > 0 ? playlistSongIds[idx - 1]
+          : (loopPlaylist ? playlistSongIds[playlistSongIds.length - 1] : null);
+        const nextId = idx < playlistSongIds.length - 1 ? playlistSongIds[idx + 1]
+          : (loopPlaylist ? playlistSongIds[0] : null);
+        return {
+          prevSong: prevId ? songs.find((s) => s.id === prevId) : null,
+          nextSong: nextId ? songs.find((s) => s.id === nextId) : null,
+        };
+      }
+    }
+    // single 모드 또는 fallback: 전체 곡 목록 순서
+    return {
+      prevSong: currentIndex > 0 ? songs[currentIndex - 1] : null,
+      nextSong: currentIndex < songs.length - 1 ? songs[currentIndex + 1] : null,
+    };
+  }, [playbackMode, playlistSongIds, id, songs, currentIndex, loopPlaylist]);
 
   const scriptureLabel = song
     ? song.psalmNumber
@@ -152,6 +204,26 @@ export default function SongDetailPage() {
     : "";
 
   useEffect(() => { if (id) addRecent(id); }, [id, addRecent]);
+
+  // 플레이리스트 모드에서 곡 변경/진입 시 자동 재생 처리
+  // 활성 플레이어(midi 또는 accompanist)가 ready 상태가 되면 자동으로 play() 호출
+  useEffect(() => {
+    if (playbackMode !== "playlist") return;
+    // 활성 탭에 따라 어느 플레이어가 준비되어야 하는지 결정
+    const playerReady =
+      activeTab === "accompanist" ? accompanist.ready : midi.ready;
+    if (!playerReady) return;
+
+    // pendingAutoPlay 플래그가 있을 때만 자동 재생 (사용자 의도가 명시된 경우)
+    if (consumeAutoPlay()) {
+      const player = activeTab === "accompanist" ? accompanist : midi;
+      // 약간의 딜레이로 ready 직후 안전하게 재생
+      const t = setTimeout(() => {
+        try { player.play(); } catch (e) { console.warn("[자동 재생] play() 실패:", e); }
+      }, 100);
+      return () => clearTimeout(t);
+    }
+  }, [playbackMode, activeTab, midi.ready, accompanist.ready, consumeAutoPlay, midi, accompanist]);
 
   // footer 높이 측정
   useEffect(() => {
@@ -408,10 +480,37 @@ export default function SongDetailPage() {
       {!immersive && (
         <div ref={footerRef} style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 50 }}>
           <div style={{ backgroundColor: "var(--accent, #374151)" }}>
+            {/* 플레이리스트 모드 인디케이터 */}
+            {playbackMode === "playlist" && playlistSongIds.length > 0 && (
+              <div className="max-w-3xl mx-auto px-3 pt-1.5 pb-0.5 flex items-center justify-between text-[10px] text-white/70">
+                <span className="inline-flex items-center gap-1">
+                  <span>🎵</span>
+                  <span>플레이리스트 재생 중</span>
+                  <span className="opacity-70">· {playbackIndex + 1}/{playlistSongIds.length}</span>
+                  {loopPlaylist && <span className="opacity-70">· 🔁 전체 반복</span>}
+                </span>
+                <button
+                  onClick={() => exitPlaylistMode()}
+                  className="hover:text-white transition-colors"
+                  title="플레이리스트 모드 종료"
+                >
+                  종료
+                </button>
+              </div>
+            )}
             <div className="max-w-3xl mx-auto px-3 py-2">
               <div className="flex items-center gap-2">
                 {/* ◀ 이전 곡 */}
-                <button onClick={() => prevSong && navigate(`/song/${prevSong.id}`)}
+                <button
+                  onClick={() => {
+                    if (!prevSong) return;
+                    if (playbackMode === "playlist") {
+                      const id = goToPrev();
+                      if (id) navigate(`/song/${id}`);
+                    } else {
+                      navigate(`/song/${prevSong.id}`);
+                    }
+                  }}
                   disabled={!prevSong}
                   style={{ width: "36px", height: "36px", minWidth: "36px" }}
                   className={`shrink-0 rounded-full flex items-center justify-center transition-colors ${prevSong ? "text-white/80 hover:text-white active:bg-white/10" : "text-white/20 cursor-not-allowed"}`}
@@ -430,7 +529,16 @@ export default function SongDetailPage() {
                 )}
 
                 {/* ▶ 다음 곡 */}
-                <button onClick={() => nextSong && navigate(`/song/${nextSong.id}`)}
+                <button
+                  onClick={() => {
+                    if (!nextSong) return;
+                    if (playbackMode === "playlist") {
+                      const id = goToNext();
+                      if (id) navigate(`/song/${id}`);
+                    } else {
+                      navigate(`/song/${nextSong.id}`);
+                    }
+                  }}
                   disabled={!nextSong}
                   style={{ width: "36px", height: "36px", minWidth: "36px" }}
                   className={`shrink-0 rounded-full flex items-center justify-center transition-colors ${nextSong ? "text-white/80 hover:text-white active:bg-white/10" : "text-white/20 cursor-not-allowed"}`}

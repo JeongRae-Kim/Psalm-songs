@@ -6,18 +6,21 @@ import SettingsPage from "./pages/SettingsPage";
 import PlaylistPage from "./pages/PlaylistPage";
 import InstallBanner from "./components/InstallBanner";
 import { PlaylistProvider } from "./contexts/PlaylistContext";
+import { PlaybackProvider } from "./contexts/PlaybackContext";
 
 export default function App() {
   return (
     <BrowserRouter>
       <PlaylistProvider>
-        <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/song/:id" element={<SongDetailPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-          <Route path="/playlist" element={<PlaylistPage />} />
-        </Routes>
-        <InstallBanner />
+        <PlaybackProvider>
+          <Routes>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/song/:id" element={<SongDetailPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/playlist" element={<PlaylistPage />} />
+          </Routes>
+          <InstallBanner />
+        </PlaybackProvider>
       </PlaylistProvider>
     </BrowserRouter>
   );

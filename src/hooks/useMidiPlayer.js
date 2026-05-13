@@ -79,7 +79,7 @@ function computeMeasureBoundaries(midi) {
   }));
 }
 
-export default function useMidiPlayer(midiUrl, totalLoops = 1, instrument = "piano") {
+export default function useMidiPlayer(midiUrl, totalLoops = 1, instrument = "piano", onEnded = null) {
   const [loading, setLoading] = useState(false);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState(null);
@@ -90,6 +90,10 @@ export default function useMidiPlayer(midiUrl, totalLoops = 1, instrument = "pia
   const [pianoLoading, setPianoLoading] = useState(false);
   const [currentLoop, setCurrentLoop] = useState(0);  // 현재 몇 번째 반복인지 (0부터)
   const [infiniteLoop, setInfiniteLoop] = useState(false);  // 무한 반복 모드
+
+  // onEnded 콜백 ref: 곡 종료 시 외부에 알림 (플레이리스트 자동 이어재생용)
+  const onEndedRef = useRef(onEnded);
+  useEffect(() => { onEndedRef.current = onEnded; }, [onEnded]);
 
   const pianoRef = useRef(null);
   const audioCtxRef = useRef(null);
@@ -290,6 +294,10 @@ export default function useMidiPlayer(midiUrl, totalLoops = 1, instrument = "pia
         currentLoopRef.current = 0;
         setCurrentLoop(0);
         stopRef.current?.();
+        // 외부에 곡 종료 알림 (플레이리스트 자동 이어재생 등)
+        if (onEndedRef.current) {
+          try { onEndedRef.current(); } catch (e) { console.warn("[useMidiPlayer] onEnded 콜백 오류:", e); }
+        }
       }
     }, endDelay + 100);
     scheduledRef.current.push(endId);
