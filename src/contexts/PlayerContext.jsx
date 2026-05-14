@@ -6,25 +6,33 @@ import { useTheme } from "./ThemeContext";
 import usePlayback from "./PlaybackContext";
 
 /**
- * PlayerContext v2 — 재생 엔진 전역화 (단계 B-1)
+ * PlayerContext v3 — 재생 엔진 전역화 (단계 E)
  *
  * 변경 이력:
  *   - 단계 A: Provider 골격만 (placeholder).
  *   - 단계 B-1: 재생 엔진(useMidiPlayer / useAccompanistPlayer)을
  *     SongDetailPage에서 이곳으로 이동. Provider가 currentSong을 보유한다.
+ *   - 단계 E: 훅 중복 실행 정리. 두 엔진은 React 훅 규칙상 여전히 둘 다
+ *     호출하되, 비활성 엔진에는 midiFile 대신 null을 주입한다. 두 훅 모두
+ *     midiUrl이 falsy면 fetch·파싱을 건너뛰는 가드를 이미 갖고 있으므로
+ *     (useMidiPlayer.js / useAccompanistPlayer.js의 MIDI 로드 effect),
+ *     훅 내부 코드는 한 줄도 바꾸지 않는다.
  *
  * 설계 (B-1 설계명세 기준):
  *   - 방식 1: Provider가 currentSong을 자체 상태로 보유.
  *   - 선택지 A: loadSong(song)으로 곡 객체를 통째로 주입받음.
  *     Provider는 useSongs를 호출하지 않는다.
- *   - 엔진 2개(midi, accompanist)는 B-1에서는 기존과 동일하게 항상 호출.
- *     훅 2개 동시 실행 정리는 단계 E.
  *
- * B-1 시점의 의도된 한계:
- *   - loadSong은 단순 대입만 함. "같은 곡이면 재로드 안 함" / "곡 바뀌면
- *     정지" 로직은 단계 B-2·C에서 추가.
- *   - 따라서 B-1 직후에도 "설정 다녀오면 초기화" 문제는 아직 남아 있다.
- *   - 자동재생 로직은 이곳으로 옮기되 동작은 기존과 동일하게 유지(정리는 단계 D).
+ * 단계 E의 의도된 동작:
+ *   - 곡 진입 시 활성 탭에 해당하는 엔진만 MIDI를 1회 fetch·파싱한다.
+ *     (기존: 두 엔진이 각 1회 = 곡당 2회)
+ *   - 탭 전환 시 새로 활성이 된 엔진의 midiUrl이 null→실제URL로 바뀌며
+ *     그 엔진이 재파싱한다. 두 훅 모두 파싱 결과 캐시가 없으므로 같은 곡
+ *     안에서 탭을 왕복하면 그때마다 재파싱이 발생한다. 12곡 환경에서는
+ *     체감 지연이 거의 없으며, 필요 시 캐싱은 별도 단계로 다룬다.
+ *   - "탭 전환 시 그 탭의 재생이 정지 상태로 시작"되는 동작은 B-1과 동일
+ *     (아래 activeTab effect의 stop() 호출). 단계 E가 추가하는 것은
+ *     재생 버튼 활성화까지의 짧은 로딩 지연뿐이다.
  */
 
 const PlayerContext = createContext(null);
@@ -66,10 +74,22 @@ export function PlayerProvider({ children }) {
     }
   }, [playbackMode, goToNext, navigate, exitPlaylistMode]);
 
-  // ── 재생 엔진 (B-1: 기존과 동일하게 항상 2개 호출) ──
-  const midi = useMidiPlayer(midiFile, totalLoops, instrument, handleSongEnded);
+  // ── 재생 엔진 (단계 E: 활성 탭의 엔진에만 midiFile 주입) ──
+  // React 훅 규칙상 두 훅은 여전히 무조건 호출한다(조건부 호출 불가).
+  // 대신 비활성 엔진에는 midiFile 대신 null을 넘긴다. 두 훅 모두 MIDI 로드
+  // effect 첫머리에 `if (!midiUrl) { setReady(false); return; }` 가드가
+  // 있으므로, null을 받은 엔진은 fetch·파싱을 건너뛴다.
+  //
+  // 활성 판정: 악보/가사 탭 → midi, 반주기 탭 → accompanist.
+  const midiActive = activeTab !== "accompanist";
+  const accompanistActive = activeTab === "accompanist";
+
+  const midiInput = midiActive ? midiFile : null;
+  const accompanistInput = accompanistActive ? midiFile : null;
+
+  const midi = useMidiPlayer(midiInput, totalLoops, instrument, handleSongEnded);
   const accompanist = useAccompanistPlayer(
-    midiFile,
+    accompanistInput,
     totalLoops,
     introMeasures,
     hasAmen,
