@@ -1,5 +1,5 @@
 /**
- * useAccompanistPlayer.js v1.0
+ * useAccompanistPlayer.js v1.1
  *
  * "반주기" 탭 전용 훅 — PDF 악보 + MIDI 구간 재생
  *
@@ -13,116 +13,20 @@
  *   - 재생: SplendidGrandPiano (smplr) — useMidiPlayer와 동일
  *   - 시퀀스 제어: phase 상태머신 (intro → body × N → amen → done)
  *
+ * 6-1 부분 통합: createInstrument, computeMeasureBoundaries 두 순수 함수를
+ *   playerEngineUtils.js로 추출. 함수 정의를 이 파일에서 삭제하고 import로
+ *   대체했다. 호출부와 그 외 모든 로직(phase 머신, 구간 산출, scheduleRange,
+ *   play/pause/stop)은 한 줄도 바꾸지 않았다. 기존 computeMeasureBoundaries에
+ *   있던 tempoEvents 수집 블록은 함수 내 어디에서도 쓰이지 않던 죽은 코드라
+ *   추출본에 포함하지 않았다(동작 동일). smplr 클래스는 createInstrument
+ *   안에서만 쓰였으므로 import도 함께 제거됐다.
+ *
  * 필요 패키지: npm install @tonejs/midi smplr
  */
 import { useState, useRef, useCallback, useEffect } from "react";
 import { Midi } from "@tonejs/midi";
-import { SplendidGrandPiano, ElectricPiano, Soundfont } from "smplr";
 import { getAudioContext } from "./audioContext";
-
-/* ─────────────────────────────────────────────────
-   헬퍼: 악기 인스턴스 생성
-   ───────────────────────────────────────────────── */
-async function createInstrument(ctx, instrumentKey) {
-  let inst;
-  switch (instrumentKey) {
-    case "epiano":
-      inst = new ElectricPiano(ctx, { instrument: "CP80" });
-      break;
-    case "organ":
-      inst = new Soundfont(ctx, { instrument: "church_organ" });
-      break;
-    case "harpsichord":
-      inst = new Soundfont(ctx, { instrument: "harpsichord" });
-      break;
-    case "celesta":
-      inst = new Soundfont(ctx, { instrument: "celesta" });
-      break;
-    case "piano":
-    default:
-      inst = new SplendidGrandPiano(ctx);
-      break;
-  }
-  await inst.loaded();
-  return inst;
-}
-
-/* ─────────────────────────────────────────────────
-   헬퍼: MIDI에서 마디 경계(초) 배열 계산
-   ───────────────────────────────────────────────── */
-function computeMeasureBoundaries(midi) {
-  const tpb = midi.header.ppq; // ticks per beat
-
-  // 1. 박자표 이벤트 수집 (tick 순)
-  const tsEvents = (midi.header.timeSignatures || [])
-    .map((ts) => ({
-      ticks: ts.ticks,
-      num: ts.timeSignature[0],
-      den: ts.timeSignature[1],
-    }))
-    .sort((a, b) => a.ticks - b.ticks);
-
-  if (tsEvents.length === 0) {
-    tsEvents.push({ ticks: 0, num: 4, den: 4 });
-  }
-
-  // 2. 템포 이벤트 수집 (tick 순) — tick→초 변환용
-  const tempoEvents = (midi.header.tempos || [])
-    .map((t) => ({ ticks: t.ticks, bpm: t.bpm }))
-    .sort((a, b) => a.ticks - b.ticks);
-
-  if (tempoEvents.length === 0) {
-    tempoEvents.push({ ticks: 0, bpm: 120 });
-  }
-
-  // 3. 총 tick 수 계산
-  let totalTicks = 0;
-  midi.tracks.forEach((track) => {
-    track.notes.forEach((n) => {
-      const endTick = midi.header.secondsToTicks(n.time + n.duration);
-      if (endTick > totalTicks) totalTicks = endTick;
-    });
-  });
-  // controlChanges, 기타 이벤트의 끝도 고려
-  if (totalTicks === 0) {
-    totalTicks = midi.header.secondsToTicks(midi.duration);
-  }
-
-  // 4. 마디 경계를 tick 단위로 계산
-  const measures = []; // { startTick, endTick, num, den }
-  let currentTick = 0;
-  let tsIdx = 0;
-
-  while (currentTick < totalTicks) {
-    // 현재 tick에서의 박자표 결정
-    while (tsIdx < tsEvents.length - 1 && tsEvents[tsIdx + 1].ticks <= currentTick) {
-      tsIdx++;
-    }
-    const { num, den } = tsEvents[tsIdx];
-    const measureTicks = Math.round(num * (4 / den) * tpb);
-
-    // 다음 박자표 변경 지점
-    const nextTsTick =
-      tsIdx < tsEvents.length - 1 ? tsEvents[tsIdx + 1].ticks : totalTicks + 1;
-    const endTick = Math.min(currentTick + measureTicks, nextTsTick);
-    const actualTicks = endTick - currentTick;
-
-    measures.push({ startTick: currentTick, endTick, num, den, actualTicks, measureTicks });
-    currentTick = endTick;
-  }
-
-  // 5. 불완전 마디(유령 마디) 필터링: 예상 길이의 10% 미만
-  const validMeasures = measures.filter((m) => m.actualTicks >= m.measureTicks * 0.1);
-
-  // 6. tick → 초 변환
-  const tickToSec = (tick) => midi.header.ticksToSeconds(tick);
-
-  return validMeasures.map((m) => ({
-    startSec: tickToSec(m.startTick),
-    endSec: tickToSec(m.endTick),
-    ts: `${m.num}/${m.den}`,
-  }));
-}
+import { createInstrument, computeMeasureBoundaries } from "./playerEngineUtils";
 
 /* ─────────────────────────────────────────────────
    메인 훅

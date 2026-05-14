@@ -1,83 +1,23 @@
 /**
- * useMidiPlayer.js v5
+ * useMidiPlayer.js v6
  * MIDI 파일 로드/파싱 + SoundFont 피아노 재생 (smplr) + 반복 재생
  *
  * 반복 재생: mid가 본곡 1회분이고, totalLoops만큼 자동 반복
  * - 매 반복 시작 시 currentLoop 카운트 증가 (외부 컴포넌트가 cursor 리셋용)
  * - 마지막 반복 끝나면 자동 정지
  *
+ * 6-1 부분 통합: createInstrument, computeMeasureBoundaries 두 순수 함수를
+ *   playerEngineUtils.js로 추출. 함수 정의를 이 파일에서 삭제하고 import로
+ *   대체했다. 호출부와 그 외 모든 로직(스케줄링, 반복, tick, play/pause/
+ *   stop/seek/changeTempo)은 한 줄도 바꾸지 않았다. smplr 클래스는
+ *   createInstrument 안에서만 쓰였으므로 import도 함께 제거됐다.
+ *
  * 필요 패키지: npm install @tonejs/midi smplr
  */
 import { useState, useRef, useCallback, useEffect } from "react";
 import { Midi } from "@tonejs/midi";
-import { SplendidGrandPiano, ElectricPiano, Soundfont } from "smplr";
 import { getAudioContext } from "./audioContext";
-
-/* ── 악기 인스턴스 생성 헬퍼 ── */
-async function createInstrument(ctx, instrumentKey) {
-  let inst;
-  switch (instrumentKey) {
-    case "epiano":
-      inst = new ElectricPiano(ctx, { instrument: "CP80" });
-      break;
-    case "organ":
-      inst = new Soundfont(ctx, { instrument: "church_organ" });
-      break;
-    case "harpsichord":
-      inst = new Soundfont(ctx, { instrument: "harpsichord" });
-      break;
-    case "celesta":
-      inst = new Soundfont(ctx, { instrument: "celesta" });
-      break;
-    case "piano":
-    default:
-      inst = new SplendidGrandPiano(ctx);
-      break;
-  }
-  await inst.loaded();
-  return inst;
-}
-
-/* ── 마디 경계 계산 (마지막 음표 보정용) ── */
-function computeMeasureBoundaries(midi) {
-  const tpb = midi.header.ppq;
-  const tsEvents = (midi.header.timeSignatures || [])
-    .map((ts) => ({ ticks: ts.ticks, num: ts.timeSignature[0], den: ts.timeSignature[1] }))
-    .sort((a, b) => a.ticks - b.ticks);
-  if (tsEvents.length === 0) tsEvents.push({ ticks: 0, num: 4, den: 4 });
-
-  let totalTicks = 0;
-  midi.tracks.forEach((track) => {
-    track.notes.forEach((n) => {
-      const endTick = midi.header.secondsToTicks(n.time + n.duration);
-      if (endTick > totalTicks) totalTicks = endTick;
-    });
-  });
-  if (totalTicks === 0) totalTicks = midi.header.secondsToTicks(midi.duration);
-
-  const measures = [];
-  let currentTick = 0;
-  let tsIdx = 0;
-  while (currentTick < totalTicks) {
-    while (tsIdx < tsEvents.length - 1 && tsEvents[tsIdx + 1].ticks <= currentTick) tsIdx++;
-    const { num, den } = tsEvents[tsIdx];
-    const measureTicks = Math.round(num * (4 / den) * tpb);
-    const nextTsTick = tsIdx < tsEvents.length - 1 ? tsEvents[tsIdx + 1].ticks : totalTicks + 1;
-    const endTick = Math.min(currentTick + measureTicks, nextTsTick);
-    const actualTicks = endTick - currentTick;
-    measures.push({ startTick: currentTick, endTick, num, den, actualTicks, measureTicks });
-    currentTick = endTick;
-  }
-
-  const validMeasures = measures.filter((m) => m.actualTicks >= m.measureTicks * 0.1);
-  const tickToSec = (tick) => midi.header.ticksToSeconds(tick);
-
-  return validMeasures.map((m) => ({
-    startSec: tickToSec(m.startTick),
-    endSec: tickToSec(m.endTick),
-    ts: `${m.num}/${m.den}`,
-  }));
-}
+import { createInstrument, computeMeasureBoundaries } from "./playerEngineUtils";
 
 export default function useMidiPlayer(midiUrl, totalLoops = 1, instrument = "piano", onEnded = null) {
   const [loading, setLoading] = useState(false);
