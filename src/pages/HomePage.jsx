@@ -1,7 +1,7 @@
 
 import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import useSongs from "../hooks/useSongs";
+import useSongs from "../contexts/SongsContext";
 import useFavorites from "../hooks/useFavorites";
 import useRecent from "../hooks/useRecent";
 import SongCard from "../components/SongCard";

@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import useSongs from "../hooks/useSongs";
+import useSongs from "../contexts/SongsContext";
 import usePlaylists from "../hooks/usePlaylists";
 import usePlayback from "../contexts/PlaybackContext";
 import HomeIcon from "../components/icons/HomeIcon";

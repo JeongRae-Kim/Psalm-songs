@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
-import useSongs from "../hooks/useSongs";
+import useSongs from "../contexts/SongsContext";
 import useFavorites from "../hooks/useFavorites";
 import useRecent from "../hooks/useRecent";
 import { useTheme } from "../contexts/ThemeContext";
