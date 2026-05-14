@@ -1,9 +1,15 @@
-/* ── MiniPlayer.jsx v3 ──
+/* ── MiniPlayer.jsx v4 ──
  * 공통 미니 플레이어 컴포넌트 (단일행, 메모/확장/템포 제거)
  *
  * 1행 구성: [정지] [재생/일시정지] [반복] [프로그레스 바] [절 카운트]
+ *
+ * 단계 B-1 변경:
+ *   - 기존: player 객체를 props로 받음
+ *   - 변경: usePlayer() context 구독으로 전환. player prop 제거.
+ *   - showSoundToggle prop은 유지 (박자연습 전용, 재생 엔진과 무관).
  */
 import { getAudioContext } from "../hooks/audioContext";
+import usePlayer from "../contexts/PlayerContext";
 
 /* ── 아이콘 ── */
 const PlayIcon = () => (
@@ -50,10 +56,11 @@ const RepeatIcon = () => (
 
 /**
  * @param {Object} props
- * @param {Object} props.player - 플레이어 훅 반환 객체
  * @param {boolean} [props.showSoundToggle=false] - 사운드 ON/OFF 버튼 (박자연습 전용)
  */
-export default function MiniPlayer({ player, showSoundToggle = false }) {
+export default function MiniPlayer({ showSoundToggle = false }) {
+  const player = usePlayer();
+
   /* 로딩 상태 */
   if (!player.ready) {
     return (

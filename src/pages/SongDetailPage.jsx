@@ -1,10 +1,8 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import useSongs from "../hooks/useSongs";
 import useFavorites from "../hooks/useFavorites";
 import useRecent from "../hooks/useRecent";
-import useAccompanistPlayer from "../hooks/useAccompanistPlayer";
-import useMidiPlayer from "../hooks/useMidiPlayer";
 import { useTheme } from "../contexts/ThemeContext";
 import LyricsView from "../components/LyricsView";
 import SheetView from "../components/SheetView";
@@ -12,6 +10,19 @@ import HomeIcon from "../components/icons/HomeIcon";
 import MiniPlayer from "../components/MiniPlayer";
 import AddToPlaylistButton from "../components/AddToPlaylistButton";
 import usePlayback from "../contexts/PlaybackContext";
+import usePlayer from "../contexts/PlayerContext";
+
+/*
+ * 단계 B-1 변경 요약:
+ *   - useMidiPlayer / useAccompanistPlayer 직접 호출 제거 → usePlayer() 구독.
+ *   - handleSongEnded, 자동재생 effect, 탭전환 비활성정지 effect → PlayerContext로 이동.
+ *   - 곡을 찾으면 playerCtx.loadSong(song) 호출로 재생 대상을 Provider에 알림.
+ *   - activeTab은 PlayerContext가 소유. 페이지는 playerCtx.activeTab / setActiveTab 사용.
+ *
+ * B-1의 의도된 한계 (단계 C·D에서 해결):
+ *   - 곡 변경 effect 안의 무조건 stop()은 아직 남아 있음 → 단계 C에서 제거.
+ *     따라서 B-1 직후엔 설정 다녀오면 여전히 재생이 초기화됨.
+ */
 
 /* ── 아이콘 SVG (페이지 전용) ── */
 const SettingsIcon = () => (
@@ -80,7 +91,7 @@ export default function SongDetailPage() {
   const { songs, loading } = useSongs();
   const { isFavorite, toggleFavorite } = useFavorites();
   const { addRecent } = useRecent();
-  const { instrument, fontSize, setFontSize } = useTheme();
+  const { fontSize, setFontSize } = useTheme();
   const {
     playbackMode,
     playlistSongIds,
@@ -89,11 +100,13 @@ export default function SongDetailPage() {
     goToNext,
     goToPrev,
     syncCurrentSong,
-    consumeAutoPlay,
     exitPlaylistMode,
   } = usePlayback();
 
-  const [activeTab, setActiveTab] = useState(location.state?.tab || "sheet");
+  // ── 재생 엔진은 PlayerContext가 보유. 페이지는 구독만 한다. ──
+  const player = usePlayer();
+  const { activeTab, setActiveTab } = player;
+
   const [immersive, setImmersive] = useState(false);
   const [sheetScale, setSheetScale] = useState(SHEET_SCALE_DEFAULT);  // 악보/반주기 줌
 
@@ -108,36 +121,30 @@ export default function SongDetailPage() {
   const hasMidi = Boolean(song?.midiFile);
   const hasAccompanist = hasMidi;  // 반주기: MIDI만 있으면 됨
 
-  const totalLoops = song?.verses?.length || 1;
-
-  // ── onEnded 핸들러: 곡 끝났을 때 (곡 무한반복이 아닌 경우만 호출됨) ──
-  // playlist 모드면 다음 곡으로 자동 이동, 아니면 정지 (기본 동작)
-  const handleSongEnded = useCallback(() => {
-    if (playbackMode !== "playlist") return; // single 모드는 기본 정지 동작 유지
-    const nextId = goToNext();
-    if (nextId) {
-      // 다음 곡 페이지로 이동 (페이지 마운트 시 자동 재생 트리거됨)
-      navigate(`/song/${nextId}`);
-    } else {
-      // 다음 곡 없음 + 전체 반복 OFF → 정지 후 모드 해제
-      exitPlaylistMode();
+  // location.state로 전달된 탭 정보 (설정 페이지에서 복귀 시 등) 반영
+  // B-1: activeTab은 PlayerContext 소유. 진입 시 location.state.tab이 있으면 동기화.
+  useEffect(() => {
+    if (location.state?.tab && location.state.tab !== activeTab) {
+      setActiveTab(location.state.tab);
     }
-  }, [playbackMode, goToNext, navigate, exitPlaylistMode]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state?.tab]);
 
-  const midi = useMidiPlayer(hasMidi ? song.midiFile : null, totalLoops, instrument, handleSongEnded);
-  const accompanist = useAccompanistPlayer(
-    hasAccompanist ? song.midiFile : null,
-    totalLoops,
-    song?.introMeasures || 4,
-    song?.hasAmen || false,
-    instrument,
-    handleSongEnded
-  );
-
-  // 곡 변경 시: 현재 탭이 새 곡에서 유효한지 검사 + 모드 동기화
+  // ── 곡 변경 시: 재생 대상을 Provider에 로드 + 탭 유효성 검사 + 모드 동기화 ──
+  // B-1: handleSongEnded / 자동재생 / 탭전환 비활성정지는 PlayerContext로 이동함.
+  //
+  // 선택지 가 적용: 무조건 stop()을 제거함. 곡 변경 시 정지 책임은
+  // PlayerContext의 loadSong이 진다 (같은 곡이면 정지 안 함 → 재생 보존,
+  // 다른 곡이면 이전 재생 정지). 이로써 "재마운트 시 재생 초기화" 문제의
+  // 핵심 원인 하나가 B-1 시점에 이미 제거된다.
+  // (단계 C에서 loadSong의 같은-곡 판정을 더 정교화 예정.)
   useEffect(() => {
     const currentSong = songs.find((s) => s.id === id);
     if (!currentSong) return;
+
+    // 재생 대상을 Provider에 알림 (방식 1 / 선택지 A).
+    // loadSong이 곡 변경 여부를 판단해 정지/보존을 처리한다.
+    player.loadSong(currentSong);
 
     const songHasMidi = Boolean(currentSong.midiFile);
     const songHasLyrics = currentSong.verses && currentSong.verses.length > 0;
@@ -151,26 +158,10 @@ export default function SongDetailPage() {
       setActiveTab("sheet");
     }
 
-    if (accompanist.ready) accompanist.stop();
-    if (midi.ready) midi.stop();
-
     // 플레이리스트 모드면 currentIndex를 이 곡으로 동기화
-    // (해당 곡이 플레이리스트에 없으면 자동으로 single 모드 전환)
     syncCurrentSong(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, songs]);
-
-  // 탭 전환 시 비활성 플레이어 정지
-  useEffect(() => {
-    if (activeTab === "accompanist") {
-      // 반주기 탭으로 오면 midi 정지
-      if (midi.playing) midi.stop();
-    } else {
-      // 다른 탭으로 가면 accompanist 정지
-      if (accompanist.playing) accompanist.stop();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab]);
 
   // 이전/다음 곡 결정: 플레이리스트 모드면 플레이리스트 순서, 아니면 전체 곡 순서
   const currentIndex = useMemo(() => songs.findIndex((s) => s.id === id), [songs, id]);
@@ -204,68 +195,6 @@ export default function SongDetailPage() {
     : "";
 
   useEffect(() => { if (id) addRecent(id); }, [id, addRecent]);
-
-  // 플레이리스트 모드에서 곡 변경/진입 시 자동 재생 처리
-  // 활성 플레이어(midi 또는 accompanist)가 ready 상태가 되면 자동으로 play() 호출
-  //
-  // 안정성 처리:
-  // - consumeAutoPlay()를 setTimeout 콜백 내부에서 호출 → cleanup으로 인한 플래그 소실 방지
-  // - 비활성 플레이어의 ready 변경에는 반응하지 않도록 의존성 단순화
-  // - midi/accompanist 객체 전체를 의존성에서 제거 (매 렌더마다 새 객체 → 무한 재실행 방지)
-  const activePlayerReady =
-    activeTab === "accompanist" ? accompanist.ready : midi.ready;
-
-  useEffect(() => {
-    console.log("[자동재생 진단] effect 실행", {
-      playbackMode,
-      activeTab,
-      activePlayerReady,
-      songId: id,
-    });
-
-    if (playbackMode !== "playlist") {
-      console.log("[자동재생 진단] → single 모드라 종료");
-      return;
-    }
-
-    if (!activePlayerReady) {
-      console.log("[자동재생 진단] → 활성 플레이어 ready 아님, 대기");
-      return;
-    }
-
-    console.log("[자동재생 진단] → 100ms 후 consumeAutoPlay + play() 시도 예약");
-
-    const t = setTimeout(() => {
-      // 소비를 setTimeout 안에서 → cleanup 발생해도 플래그 보존됨
-      const shouldAutoPlay = consumeAutoPlay();
-      console.log("[자동재생 진단] (지연 실행) consumeAutoPlay 결과:", shouldAutoPlay);
-      if (!shouldAutoPlay) {
-        console.log("[자동재생 진단] (지연 실행) → 자동 재생 플래그 없음, 종료");
-        return;
-      }
-
-      console.log("[자동재생 진단] (지연 실행) → 실제 play() 호출 시도");
-      try {
-        // 클로저로 최신 참조 사용을 위해 호출 시점에 결정
-        if (activeTab === "accompanist") {
-          accompanist.play();
-        } else {
-          midi.play();
-        }
-        console.log("[자동재생 진단] (지연 실행) ✓ play() 호출 성공");
-      } catch (e) {
-        console.warn("[자동재생 진단] (지연 실행) ✗ play() 실패:", e);
-      }
-    }, 100);
-
-    return () => {
-      console.log("[자동재생 진단] cleanup: setTimeout 취소됨 (플래그는 보존)");
-      clearTimeout(t);
-    };
-    // 의도적으로 midi/accompanist 객체는 의존성에서 제외
-    // 위 setTimeout 콜백 내에서 호출 시점에 클로저로 참조하므로 stale 위험 낮음
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playbackMode, activeTab, activePlayerReady, id, consumeAutoPlay]);
 
   // footer 높이 측정
   useEffect(() => {
@@ -322,12 +251,8 @@ export default function SongDetailPage() {
     height: "2px", backgroundColor: "white",
   };
 
-  // 현재 활성 플레이어 — 악보/가사는 midi, 반주기는 accompanist
+  // 현재 활성 플레이어 — 악보/가사는 midi, 반주기는 accompanist (PlayerContext가 결정)
   const hasActivePlayer = hasMidi;
-
-  const activePlayer =
-    activeTab === "accompanist" ? accompanist :
-    hasMidi ? midi : null;
 
   const activeShowSoundToggle = false;
 
@@ -484,12 +409,10 @@ export default function SongDetailPage() {
             />
           )}
 
-          {/* 가사: midi 플레이어의 currentLoop, playing 전달 + 폰트 사이즈 */}
+          {/* 가사: LyricsView가 usePlayer()에서 재생 상태를 직접 구독 */}
           {activeTab === "lyrics" && (
             <LyricsView
               verses={song.verses}
-              currentLoop={midi.currentLoop}
-              playing={midi.playing}
               fontSize={fontSize}
             />
           )}
@@ -503,14 +426,14 @@ export default function SongDetailPage() {
                 scale={sheetScale}
                 onScaleChange={setSheetScale}
               />
-              {accompanist.playing && accompanist.phaseLabel && (
+              {player.playing && player.phaseLabel && (
                 <div style={{
                   position: "fixed", top: headerH + 8, right: 16, zIndex: 40,
                   backgroundColor: "rgba(0,0,0,0.7)", color: "white",
                   padding: "4px 12px", borderRadius: "12px",
                   fontSize: "0.8rem", fontWeight: 600,
                 }}>
-                  {accompanist.phaseLabel}
+                  {player.phaseLabel}
                 </div>
               )}
             </>
@@ -547,8 +470,8 @@ export default function SongDetailPage() {
                   onClick={() => {
                     if (!prevSong) return;
                     if (playbackMode === "playlist") {
-                      const id = goToPrev();
-                      if (id) navigate(`/song/${id}`);
+                      const pid = goToPrev();
+                      if (pid) navigate(`/song/${pid}`);
                     } else {
                       navigate(`/song/${prevSong.id}`);
                     }
@@ -559,11 +482,8 @@ export default function SongDetailPage() {
                   title="이전 곡"><PrevIcon /></button>
 
                 {/* 중앙: MiniPlayer 또는 성경 구절 */}
-                {hasActivePlayer && activePlayer ? (
-                  <MiniPlayer
-                    player={activePlayer}
-                    showSoundToggle={activeShowSoundToggle}
-                  />
+                {hasActivePlayer ? (
+                  <MiniPlayer showSoundToggle={activeShowSoundToggle} />
                 ) : (
                   <span className="flex-1 text-center text-xs font-medium text-white/90">
                     {scriptureLabel}
@@ -575,8 +495,8 @@ export default function SongDetailPage() {
                   onClick={() => {
                     if (!nextSong) return;
                     if (playbackMode === "playlist") {
-                      const id = goToNext();
-                      if (id) navigate(`/song/${id}`);
+                      const nid = goToNext();
+                      if (nid) navigate(`/song/${nid}`);
                     } else {
                       navigate(`/song/${nextSong.id}`);
                     }

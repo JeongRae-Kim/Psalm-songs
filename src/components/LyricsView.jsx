@@ -1,4 +1,13 @@
 import { useTheme } from "../contexts/ThemeContext";
+import usePlayer from "../contexts/PlayerContext";
+
+/*
+ * 단계 B-1 변경:
+ *   - 기존: currentLoop, playing을 props로 받음
+ *   - 변경: usePlayer()에서 lyricsCurrentLoop, lyricsPlaying 구독.
+ *     이 두 값은 PlayerContext에서 항상 midi 기준으로 채워짐 (설계명세 2-5).
+ *   - verses, fontSize prop은 유지.
+ */
 
 /* 스피커 아이콘 */
 const SpeakerIcon = () => (
@@ -18,14 +27,17 @@ const FONT_FAMILIES = {
 /**
  * @param {Object} props
  * @param {Array} props.verses - 가사 절 배열 [{number, text}, ...]
- * @param {number} [props.currentLoop] - 현재 재생 중인 절 인덱스 (0부터)
- * @param {boolean} [props.playing] - MIDI 재생 중 여부
  * @param {number} [props.fontSize] - 가사 폰트 크기 (px). props로 받으면 ThemeContext보다 우선
  */
-export default function LyricsView({ verses, currentLoop = -1, playing = false, fontSize: fontSizeProp }) {
+export default function LyricsView({ verses, fontSize: fontSizeProp }) {
   const { font, fontSize: fontSizeCtx } = useTheme();
+  const { lyricsCurrentLoop, lyricsPlaying } = usePlayer();
+
   // props로 받으면 그 값 사용, 아니면 ThemeContext 값 사용
   const fontSize = fontSizeProp != null ? fontSizeProp : fontSizeCtx;
+
+  const currentLoop = lyricsCurrentLoop ?? -1;
+  const playing = lyricsPlaying ?? false;
 
   return (
     <div className="flex flex-col gap-3 px-4 py-4">
