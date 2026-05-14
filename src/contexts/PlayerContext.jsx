@@ -6,7 +6,7 @@ import { useTheme } from "./ThemeContext";
 import usePlayback from "./PlaybackContext";
 
 /**
- * PlayerContext v3 — 재생 엔진 전역화 (단계 E)
+ * PlayerContext v4 — 재생 엔진 전역화 (단계 E) + 모드 인지 반복 (7-1)
  *
  * 변경 이력:
  *   - 단계 A: Provider 골격만 (placeholder).
@@ -17,6 +17,17 @@ import usePlayback from "./PlaybackContext";
  *     midiUrl이 falsy면 fetch·파싱을 건너뛰는 가드를 이미 갖고 있으므로
  *     (useMidiPlayer.js / useAccompanistPlayer.js의 MIDI 로드 effect),
  *     훅 내부 코드는 한 줄도 바꾸지 않는다.
+ *   - 7-1: 반복 버튼을 playbackMode 인지로 전환. 기존에는 반복 버튼이
+ *     모드와 무관하게 항상 엔진의 infiniteLoop(개별 곡 무한 반복)만
+ *     토글해, 플레이리스트 모드에서 반복을 켜면 곡이 끝나도 onEnded가
+ *     호출되지 않아 다음 곡으로 진행하지 못했다. 이제:
+ *       · single 모드 → 엔진 infiniteLoop 토글 (현행 유지)
+ *       · playlist 모드 → PlaybackContext의 loopPlaylist 토글
+ *     또한 single 모드에서 infiniteLoop를 켠 채 플레이리스트가 시작되면
+ *     엔진 infiniteLoop를 강제 해제해, 곡 종료 분기가 onEnded를 막지
+ *     않도록 한다. 엔진 훅(useMidiPlayer.js / useAccompanistPlayer.js)과
+ *     PlaybackContext.jsx는 무변경 — REFACTOR_PLAN 2장 "엔진 내부 무변경
+ *     원칙"을 그대로 지킨다.
  *
  * 설계 (B-1 설계명세 기준):
  *   - 방식 1: Provider가 currentSong을 자체 상태로 보유.
@@ -45,6 +56,8 @@ export function PlayerProvider({ children }) {
     goToNext,
     consumeAutoPlay,
     exitPlaylistMode,
+    loopPlaylist,
+    toggleLoopPlaylist,
   } = usePlayback();
 
   // ── Provider가 보유하는 상태 ──
@@ -129,6 +142,37 @@ export function PlayerProvider({ children }) {
   // 악보/가사 탭은 midi, 반주기 탭은 accompanist.
   const activePlayer = activeTab === "accompanist" ? accompanist : midi;
 
+  // ── 7-1: 모드 인지 반복 (single=엔진 무한반복 / playlist=전체 반복) ──
+  // 반복 버튼은 하나지만 playbackMode에 따라 다른 대상을 토글한다.
+  //   - single 모드   → activePlayer.infiniteLoop (엔진 개별 곡 무한 반복)
+  //   - playlist 모드 → PlaybackContext.loopPlaylist (플레이리스트 전체 반복)
+  // 두 모드는 상호 배타이므로 동시에 켜질 상황이 없다.
+  const isPlaylistMode = playbackMode === "playlist";
+  const repeatActive = isPlaylistMode ? loopPlaylist : activePlayer.infiniteLoop;
+  const repeatMode = isPlaylistMode ? "playlist" : "single";
+
+  const toggleRepeat = useCallback(() => {
+    if (playbackMode === "playlist") {
+      toggleLoopPlaylist();
+    } else {
+      activePlayer.toggleInfiniteLoop?.();
+    }
+  }, [playbackMode, toggleLoopPlaylist, activePlayer]);
+
+  // ── 7-1: 플레이리스트 진입 시 엔진 infiniteLoop 강제 해제 ──
+  // single 모드에서 엔진 infiniteLoop를 켠 채로 플레이리스트가 시작되면,
+  // 엔진의 곡 종료 분기가 여전히 infiniteLoop=true로 빠져 onEnded를
+  // 호출하지 않는다 → goToNext가 막혀 다음 곡으로 진행 못 함.
+  // playbackMode가 playlist로 바뀌는 순간 두 엔진의 infiniteLoop를 끈다.
+  // (엔진 객체는 매 렌더 새로 생성되므로 의존성에서 제외 — activeTab
+  //  정지 effect와 동일한 패턴)
+  useEffect(() => {
+    if (playbackMode !== "playlist") return;
+    if (midi.infiniteLoop) midi.toggleInfiniteLoop?.();
+    if (accompanist.infiniteLoop) accompanist.toggleInfiniteLoop?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playbackMode]);
+
   // ── 탭 전환 시 비활성 플레이어 정지 (SongDetailPage에서 이동) ──
   // 반주기 탭으로 오면 midi 정지, 다른 탭으로 가면 accompanist 정지.
   useEffect(() => {
@@ -195,8 +239,15 @@ export function PlayerProvider({ children }) {
     totalLoops: activePlayer.totalLoops,
     phase: activePlayer.phase,             // accompanist 전용. midi일 땐 undefined
     phaseLabel: activePlayer.phaseLabel,   // accompanist 전용
-    infiniteLoop: activePlayer.infiniteLoop,
-    toggleInfiniteLoop: activePlayer.toggleInfiniteLoop,
+    // 7-1: 반복 상태/토글은 모드 인지 값으로 노출.
+    //   - single   → 엔진 infiniteLoop
+    //   - playlist → PlaybackContext.loopPlaylist
+    // 인터페이스 이름(infiniteLoop/toggleInfiniteLoop)은 그대로 유지해
+    // MiniPlayer 등 구독자의 변경을 최소화한다. repeatMode로 현재 의미를
+    // 구분할 수 있다(버튼 툴팁/라벨용).
+    infiniteLoop: repeatActive,
+    toggleInfiniteLoop: toggleRepeat,
+    repeatMode,                            // "single" | "playlist"
     tempo: activePlayer.tempo,
     play: activePlayer.play,
     pause: activePlayer.pause,

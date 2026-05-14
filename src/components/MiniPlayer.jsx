@@ -1,4 +1,4 @@
-/* ── MiniPlayer.jsx v4 ──
+/* ── MiniPlayer.jsx v5 ──
  * 공통 미니 플레이어 컴포넌트 (단일행, 메모/확장/템포 제거)
  *
  * 1행 구성: [정지] [재생/일시정지] [반복] [프로그레스 바] [절 카운트]
@@ -7,6 +7,12 @@
  *   - 기존: player 객체를 props로 받음
  *   - 변경: usePlayer() context 구독으로 전환. player prop 제거.
  *   - showSoundToggle prop은 유지 (박자연습 전용, 재생 엔진과 무관).
+ *
+ * 7-1 변경:
+ *   - 반복 버튼이 모드 인지로 동작. player.infiniteLoop /
+ *     player.toggleInfiniteLoop는 PlayerContext가 playbackMode에 따라
+ *     의미를 분기해 노출하므로(single=엔진 무한반복, playlist=전체 반복),
+ *     버튼 배선 자체는 그대로 두고 툴팁만 player.repeatMode로 분기한다.
  */
 import { getAudioContext } from "../hooks/audioContext";
 import usePlayer from "../contexts/PlayerContext";
@@ -106,7 +112,7 @@ export default function MiniPlayer({ showSoundToggle = false }) {
         {player.playing ? <PauseIcon /> : <PlayIcon />}
       </button>
 
-      {/* 무한 반복 토글 */}
+      {/* 반복 토글 (7-1: 모드 인지 — single=무한 반복, playlist=전체 반복) */}
       {hasInfiniteLoop && (
         <button onClick={player.toggleInfiniteLoop}
           style={{ width: "36px", height: "36px", minWidth: "36px" }}
@@ -114,7 +120,11 @@ export default function MiniPlayer({ showSoundToggle = false }) {
             ${player.infiniteLoop
               ? "bg-white/20 text-white hover:bg-white/30"
               : "text-white/50 hover:text-white active:bg-white/10"}`}
-          title={player.infiniteLoop ? "무한 반복 끄기" : "무한 반복 켜기"}>
+          title={
+            player.repeatMode === "playlist"
+              ? (player.infiniteLoop ? "전체 반복 끄기" : "전체 반복 켜기")
+              : (player.infiniteLoop ? "무한 반복 끄기" : "무한 반복 켜기")
+          }>
           <RepeatIcon />
         </button>
       )}
