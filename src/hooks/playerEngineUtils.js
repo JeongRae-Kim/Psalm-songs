@@ -44,7 +44,7 @@ export async function createInstrument(ctx, instrumentKey) {
       inst = new SplendidGrandPiano(ctx);
       break;
   }
-  await inst.loaded();
+  await inst.load;
   return inst;
 }
 

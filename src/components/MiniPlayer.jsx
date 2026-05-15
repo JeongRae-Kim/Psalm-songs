@@ -6,7 +6,6 @@
  * 단계 B-1 변경:
  *   - 기존: player 객체를 props로 받음
  *   - 변경: usePlayer() context 구독으로 전환. player prop 제거.
- *   - showSoundToggle prop은 유지 (박자연습 전용, 재생 엔진과 무관).
  *
  * 7-1 변경:
  *   - 반복 버튼이 모드 인지로 동작. player.infiniteLoop /
@@ -33,22 +32,6 @@ const StopIcon = () => (
     <rect x="6" y="6" width="12" height="12" />
   </svg>
 );
-const SoundOnIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-    <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
-    <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
-  </svg>
-);
-const SoundOffIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-    <line x1="23" y1="9" x2="17" y2="15" />
-    <line x1="17" y1="9" x2="23" y2="15" />
-  </svg>
-);
 /* 무한 반복 아이콘 (두 화살표 원형 루프) */
 const RepeatIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
@@ -60,11 +43,7 @@ const RepeatIcon = () => (
   </svg>
 );
 
-/**
- * @param {Object} props
- * @param {boolean} [props.showSoundToggle=false] - 사운드 ON/OFF 버튼 (박자연습 전용)
- */
-export default function MiniPlayer({ showSoundToggle = false }) {
+export default function MiniPlayer() {
   const player = usePlayer();
 
   /* 로딩 상태 */
@@ -126,17 +105,6 @@ export default function MiniPlayer({ showSoundToggle = false }) {
               : (player.infiniteLoop ? "무한 반복 끄기" : "무한 반복 켜기")
           }>
           <RepeatIcon />
-        </button>
-      )}
-
-      {/* 사운드 ON/OFF (박자연습 전용) */}
-      {showSoundToggle && player.toggleSound && (
-        <button onClick={player.toggleSound}
-          style={{ width: "36px", height: "36px", minWidth: "36px" }}
-          className={`shrink-0 rounded-full flex items-center justify-center transition-colors
-            ${player.soundEnabled ? "text-white/80 hover:text-white" : "text-white/30 hover:text-white/50"}`}
-          title={player.soundEnabled ? "사운드 끄기" : "사운드 켜기"}>
-          {player.soundEnabled ? <SoundOnIcon /> : <SoundOffIcon />}
         </button>
       )}
 

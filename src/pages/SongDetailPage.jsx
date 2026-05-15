@@ -254,8 +254,6 @@ export default function SongDetailPage() {
   // 현재 활성 플레이어 — 악보/가사는 midi, 반주기는 accompanist (PlayerContext가 결정)
   const hasActivePlayer = hasMidi;
 
-  const activeShowSoundToggle = false;
-
   // ── 줌/폰트 컨트롤: 활성 탭에 따라 동작 대상 분기 ──
   const isLyricsTab = activeTab === "lyrics";
 
@@ -483,7 +481,7 @@ export default function SongDetailPage() {
 
                 {/* 중앙: MiniPlayer 또는 성경 구절 */}
                 {hasActivePlayer ? (
-                  <MiniPlayer showSoundToggle={activeShowSoundToggle} />
+                  <MiniPlayer />
                 ) : (
                   <span className="flex-1 text-center text-xs font-medium text-white/90">
                     {scriptureLabel}
