@@ -1,5 +1,5 @@
 /**
- * playerEngineUtils.js v1 — 재생 엔진 공통 순수 함수 (6-1 부분 통합)
+ * playerEngineUtils.js v1.1 — 재생 엔진 공통 순수 함수 (6-1 부분 통합)
  *
  * 배경:
  *   useMidiPlayer.js(선형 절 재생)와 useAccompanistPlayer.js(intro/body/amen
@@ -20,31 +20,49 @@
  *   한 줄도 바꾸지 않았다. useAccompanistPlayer.js 버전의
  *   computeMeasureBoundaries에 있던 tempoEvents 수집 블록은 함수 내
  *   어디에서도 사용되지 않는 죽은 코드였으므로 가져오지 않았다(동작 동일).
+ *
+ * v1.1 변경 (음질 개선):
+ *   - CacheStorage: 샘플을 브라우저 Cache API에 저장, 재방문 시 즉시 로드 (HTTPS 전용)
+ *   - decayTime 1.5초: SplendidGrandPiano 서스테인 연장 (기본값 0.5초 → 1.5초)
+ *   - Reverb mix 0.2: 공간 잔향 추가 (5개 악기 공통, 실패 시 dry 유지)
+ *   - inst.loaded() → inst.load: smplr 권장 API로 교체 (deprecated 경고 해소)
  */
-import { SplendidGrandPiano, ElectricPiano, Soundfont } from "smplr";
+import { SplendidGrandPiano, ElectricPiano, Soundfont, Reverb, CacheStorage } from "smplr";
+
+/* 샘플 캐시 — 첫 로드 후 브라우저 Cache API에 저장, 이후 네트워크 요청 없이 즉시 로드 (HTTPS 전용) */
+const storage = new CacheStorage();
 
 /* ── 악기 인스턴스 생성 헬퍼 ── */
 export async function createInstrument(ctx, instrumentKey) {
   let inst;
   switch (instrumentKey) {
     case "epiano":
-      inst = new ElectricPiano(ctx, { instrument: "CP80" });
+      inst = new ElectricPiano(ctx, { instrument: "CP80", storage });
       break;
     case "organ":
-      inst = new Soundfont(ctx, { instrument: "church_organ" });
+      inst = new Soundfont(ctx, { instrument: "church_organ", storage });
       break;
     case "harpsichord":
-      inst = new Soundfont(ctx, { instrument: "harpsichord" });
+      inst = new Soundfont(ctx, { instrument: "harpsichord", storage });
       break;
     case "celesta":
-      inst = new Soundfont(ctx, { instrument: "celesta" });
+      inst = new Soundfont(ctx, { instrument: "celesta", storage });
       break;
     case "piano":
     default:
-      inst = new SplendidGrandPiano(ctx);
+      inst = new SplendidGrandPiano(ctx, { decayTime: 1.5, storage });
       break;
   }
   await inst.load;
+
+  // 공간 잔향 — 예배당 피아노 느낌 (mix 0.2)
+  try {
+    const reverb = new Reverb(ctx);
+    inst.output.addEffect("reverb", reverb, 0.2);
+  } catch (e) {
+    console.warn("[playerEngineUtils] reverb 적용 실패 (재생에는 영향 없음):", e.message);
+  }
+
   return inst;
 }
 
